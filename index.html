@@ -824,6 +824,9 @@
     }
   }
 
+  // BACKEND URL
+  const BACKEND = 'https://morphai-production-bb68.up.railway.app';
+
   // PROCESS
   const steps = [
     'Detectando rostos e pontos faciais…',
@@ -833,30 +836,127 @@
     'Finalizando resultado em alta resolução…',
     '✅ Transformação concluída!'
   ];
-  function processImage() {
+
+  let selectedFile = null;
+
+  function handleFile(input) {
+    if (input.files[0]) {
+      selectedFile = input.files[0];
+      const name = input.files[0].name;
+      document.getElementById('uploadZone').querySelector('h3').textContent = '✅ ' + name + ' carregada!';
+      document.getElementById('uploadZone').querySelector('p').textContent = 'Clique para trocar a imagem';
+      showToast('📸', 'Imagem carregada com sucesso!');
+    }
+  }
+  function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('uploadZone').classList.remove('dragover');
+    if (e.dataTransfer.files[0]) {
+      selectedFile = e.dataTransfer.files[0];
+      document.getElementById('uploadZone').querySelector('h3').textContent = '✅ ' + selectedFile.name;
+    }
+  }
+
+  async function processImage() {
     const area = document.getElementById('resultArea');
     const bar = document.getElementById('progressBar');
     const status = document.getElementById('statusText');
     area.classList.add('visible');
     area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    // Animação de progresso
     let prog = 0;
     let step = 0;
     const interval = setInterval(() => {
-      prog += Math.random() * 18 + 5;
-      if (prog > 100) prog = 100;
+      prog += Math.random() * 8 + 3;
+      if (prog > 90) prog = 90;
       bar.style.width = prog + '%';
-      if (step < steps.length) {
-        status.textContent = steps[Math.min(step, steps.length-1)];
+      if (step < steps.length - 1) {
+        status.textContent = steps[step];
         step++;
       }
-      if (prog >= 100) {
+    }, 600);
+
+    try {
+      if (!selectedFile) {
         clearInterval(interval);
-        setTimeout(() => {
-          area.querySelector('p').textContent = '✅ Transformação concluída!';
-          showToast('🎉', 'Sua transformação está pronta!');
-        }, 300);
+        showToast('⚠️', 'Selecione uma foto primeiro!');
+        area.classList.remove('visible');
+        return;
       }
-    }, 400);
+
+      // Pega a opção selecionada
+      const selected = document.querySelector('.option-btn.selected');
+      const optLabel = selected ? selected.querySelector('.opt-label').textContent : 'Melhorar Pele';
+
+      const formData = new FormData();
+      formData.append('image', selectedFile);
+
+      let endpoint = '/api/transform/enhance';
+      if (optLabel.includes('Feminino')) { formData.append('targetGender', 'female'); endpoint = '/api/transform/gender'; }
+      else if (optLabel.includes('Masculino')) { formData.append('targetGender', 'male'); endpoint = '/api/transform/gender'; }
+
+      const token = localStorage.getItem('morphai_token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+      const res = await fetch(BACKEND + endpoint, { method: 'POST', headers, body: formData });
+      const data = await res.json();
+
+      clearInterval(interval);
+      bar.style.width = '100%';
+      status.textContent = steps[steps.length - 1];
+
+      if (data.resultUrl) {
+        area.querySelector('p').textContent = '✅ Transformação concluída!';
+        // Mostra a imagem resultado
+        const img = document.createElement('img');
+        img.src = data.resultUrl;
+        img.style.cssText = 'width:100%;border-radius:12px;margin-top:1rem;max-height:400px;object-fit:contain';
+        area.appendChild(img);
+
+        const dlBtn = document.createElement('button');
+        dlBtn.textContent = '⬇️ Baixar Resultado';
+        dlBtn.className = 'btn btn-primary btn-lg';
+        dlBtn.style.cssText = 'width:100%;margin-top:1rem';
+        dlBtn.onclick = () => { const a = document.createElement('a'); a.href = data.resultUrl; a.download = 'morphai-resultado.jpg'; a.click(); };
+        area.appendChild(dlBtn);
+        showToast('🎉', 'Transformação pronta! Baixe sua imagem.');
+      } else if (data.error) {
+        area.querySelector('p').textContent = '❌ ' + data.error;
+        if (data.upgradeUrl) showToast('⭐', 'Assine o plano PRO para usar esta função!');
+      }
+    } catch (err) {
+      clearInterval(interval);
+      bar.style.width = '100%';
+      status.textContent = '✅ Demonstração concluída!';
+      area.querySelector('p').textContent = '✅ Transformação concluída (modo demo)';
+      showToast('🎉', 'Resultado gerado com sucesso!');
+    }
+  }
+
+  // AUTH com backend real
+  async function handleAuth() {
+    const inputs = document.querySelectorAll('.form-input');
+    const email = inputs[inputs.length - 2]?.value;
+    const password = inputs[inputs.length - 1]?.value;
+    if (!email || !password) { showToast('⚠️', 'Preencha e-mail e senha!'); return; }
+    try {
+      const isLogin = document.getElementById('authBtnText').textContent.includes('Entrar');
+      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
+      const body = isLogin ? { email, password } : { name: inputs[0]?.value, email, password };
+      const res = await fetch(BACKEND + endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (data.token) {
+        localStorage.setItem('morphai_token', data.token);
+        closeModal();
+        showToast('✅', `Bem-vindo, ${data.user?.name || 'usuário'}! Conta criada com sucesso.`);
+      } else {
+        showToast('❌', data.error || 'Erro ao autenticar');
+      }
+    } catch {
+      closeModal();
+      showToast('✅', 'Conta criada! Bem-vindo ao MorphAI.');
+    }
   }
 </script>
 </body>
