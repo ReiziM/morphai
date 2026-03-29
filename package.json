@@ -1,11 +1,10 @@
 {
   "name": "morphai-backend",
-  "version": "1.0.0",
-  "description": "MorphAI - Backend de Transformação com IA",
+  "version": "2.0.0",
+  "description": "MorphAI Backend",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -13,13 +12,9 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
-    "mercadopago": "^1.5.17",
-    "multer": "^1.4.5-lts.1",
-    "replicate": "^0.25.2",
-    "stripe": "^14.5.0",
-    "node-fetch": "^3.3.2"
+    "multer": "^1.4.5-lts.1"
   },
-  "devDependencies": {
-    "nodemon": "^3.0.2"
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
