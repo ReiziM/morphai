@@ -978,102 +978,107 @@
 
   async function processImage() {
     const user = getUser();
-    if (!user) {
-      showToast('⚠️', 'Crie uma conta primeiro!');
-      openModal('signup');
-      return;
-    }
-    if (!selectedFile) {
-      showToast('⚠️', 'Selecione uma foto primeiro!');
-      return;
-    }
+    if (!user) { showToast('⚠️', 'Crie uma conta primeiro!'); openModal('signup'); return; }
+    if (!selectedFile) { showToast('⚠️', 'Selecione uma foto primeiro!'); return; }
 
     const area = document.getElementById('resultArea');
-
-    // Limpa resultado anterior e mostra progresso
     area.innerHTML = `
-      <p style="color:var(--muted);margin-bottom:0.5rem;font-size:0.875rem" id="statusTitle">Processando com IA…</p>
-      <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar" style="width:0%"></div></div>
-      <p id="statusText" style="font-size:0.8rem;color:var(--subtle);margin-top:0.5rem">Iniciando…</p>
+      <p style="color:var(--muted);margin-bottom:0.5rem;font-size:0.875rem">Processando com IA…</p>
+      <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar" style="width:5%"></div></div>
+      <p id="statusText" style="font-size:0.8rem;color:var(--subtle);margin-top:0.5rem">Enviando imagem…</p>
     `;
     area.classList.add('visible');
     area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-    // Animação de progresso enquanto espera
-    let prog = 0;
-    let step = 0;
-    const interval = setInterval(() => {
-      prog += Math.random() * 5 + 1;
-      if (prog > 92) prog = 92;
-      const bar = document.getElementById('progressBar');
-      const status = document.getElementById('statusText');
-      if (bar) bar.style.width = prog + '%';
-      if (status && step < steps.length - 1) { status.textContent = steps[step]; step++; }
-    }, 1200);
+    const setStatus = (txt, pct) => {
+      const s = document.getElementById('statusText');
+      const b = document.getElementById('progressBar');
+      if (s) s.textContent = txt;
+      if (b) b.style.width = pct + '%';
+    };
 
     try {
+      // Passo 1: envia imagem ao backend (rápido — só cria predição)
       const selected = document.querySelector('.option-btn.selected');
       const optLabel = selected ? selected.querySelector('.opt-label').textContent : 'Melhorar Pele';
       const formData = new FormData();
       formData.append('image', selectedFile);
-      let endpoint = '/api/transform/enhance';
-      if (optLabel.includes('Feminino')) { formData.append('targetGender', 'female'); endpoint = '/api/transform/gender'; }
-      else if (optLabel.includes('Masculino')) { formData.append('targetGender', 'male'); endpoint = '/api/transform/gender'; }
+      let endpoint = BACKEND + '/api/transform/enhance';
+      if (optLabel.includes('Feminino')) { formData.append('targetGender', 'female'); endpoint = BACKEND + '/api/transform/gender'; }
+      else if (optLabel.includes('Masculino')) { formData.append('targetGender', 'male'); endpoint = BACKEND + '/api/transform/gender'; }
 
-      // Timeout de 3 minutos (IA pode demorar)
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 180000);
-
-      const res = await fetch(BACKEND + endpoint, {
-        method: 'POST',
-        body: formData,
-        signal: controller.signal
-      });
-      clearTimeout(timeout);
-      clearInterval(interval);
-
+      setStatus('Enviando imagem para a IA…', 15);
+      const res = await fetch(endpoint, { method: 'POST', body: formData });
       const data = await res.json();
 
-      // Atualiza barra para 100%
-      const bar = document.getElementById('progressBar');
-      if (bar) bar.style.width = '100%';
+      if (data.error) { area.innerHTML = `<p style="color:var(--danger)">❌ ${data.error}</p>`; return; }
+      if (!data.predictionId) { area.innerHTML = `<p style="color:var(--danger)">❌ Erro ao iniciar IA</p>`; return; }
 
-      if (data.resultUrl) {
-        // Monta resultado com imagem visível
-        area.innerHTML = `
-          <p style="color:var(--success);font-weight:600;font-size:1rem;margin-bottom:1rem">✅ Transformação concluída!</p>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
-            <div>
-              <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;text-align:center">Original</p>
-              <img id="imgOriginal" style="width:100%;border-radius:12px;max-height:300px;object-fit:cover;border:1px solid var(--border)"/>
-            </div>
-            <div>
-              <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;text-align:center">Resultado IA</p>
-              <img src="${data.resultUrl}" style="width:100%;border-radius:12px;max-height:300px;object-fit:cover;border:1px solid var(--accent)" crossorigin="anonymous"/>
-            </div>
-          </div>
-          <button onclick="downloadResult('${data.resultUrl}')" class="process-btn" style="margin-top:0">
-            ⬇️ Baixar Resultado
-          </button>
-        `;
-        // Mostra imagem original ao lado
-        const imgOriginal = document.getElementById('imgOriginal');
-        if (imgOriginal && selectedFile) {
-          const reader = new FileReader();
-          reader.onload = e => { imgOriginal.src = e.target.result; };
-          reader.readAsDataURL(selectedFile);
-        }
-        showToast('🎉', 'Imagem pronta! Veja o antes e depois.');
-      } else {
-        area.innerHTML = `<p style="color:var(--danger)">❌ ${data.error || 'Erro no processamento. Tente novamente.'}</p>`;
-        showToast('❌', data.error || 'Erro. Tente novamente.');
+      // Passo 2: busca o token do Replicate para polling direto
+      setStatus('IA processando sua imagem…', 30);
+      const configRes = await fetch(BACKEND + '/api/config');
+      const config = await configRes.json();
+      const token = config.replicateToken;
+
+      // Passo 3: polling direto no Replicate (sem timeout de servidor)
+      let result = null;
+      let attempts = 0;
+      const progressSteps = [30, 40, 50, 60, 70, 80, 85, 88, 90, 92];
+      const statusMsgs = [
+        'Detectando rosto…', 'Analisando estrutura facial…', 'Aplicando IA…',
+        'Melhorando textura…', 'Ajustando detalhes…', 'Finalizando…',
+        'Quase pronto…', 'Últimos ajustes…', 'Renderizando resultado…', 'Concluindo…'
+      ];
+
+      while (attempts < 60) {
+        await new Promise(r => setTimeout(r, 3000));
+        const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${data.predictionId}`, {
+          headers: { 'Authorization': `Token ${token}` }
+        });
+        result = await pollRes.json();
+        const idx = Math.min(attempts, progressSteps.length - 1);
+        setStatus(statusMsgs[idx] || 'Processando…', progressSteps[idx] || 90);
+
+        if (result.status === 'succeeded') break;
+        if (result.status === 'failed') throw new Error('IA falhou: ' + (result.error || 'erro'));
+        attempts++;
       }
+
+      if (!result || result.status !== 'succeeded') throw new Error('Tempo esgotado');
+
+      // Passo 4: mostra resultado
+      setStatus('✅ Concluído!', 100);
+      const resultUrl = Array.isArray(result.output) ? result.output[0] : result.output;
+
+      area.innerHTML = `
+        <p style="color:var(--success);font-weight:600;font-size:1rem;margin-bottom:1rem">✅ Transformação concluída!</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+          <div>
+            <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;text-align:center">Original</p>
+            <img id="imgOriginal" style="width:100%;border-radius:12px;max-height:300px;object-fit:cover;border:1px solid var(--border)"/>
+          </div>
+          <div>
+            <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;text-align:center">Resultado IA</p>
+            <img src="${resultUrl}" style="width:100%;border-radius:12px;max-height:300px;object-fit:cover;border:2px solid var(--accent)" crossorigin="anonymous"/>
+          </div>
+        </div>
+        <button onclick="downloadResult('${resultUrl}')" class="process-btn" style="margin-top:0">⬇️ Baixar Resultado</button>
+      `;
+
+      const imgOrig = document.getElementById('imgOriginal');
+      if (imgOrig && selectedFile) {
+        const reader = new FileReader();
+        reader.onload = e => { imgOrig.src = e.target.result; };
+        reader.readAsDataURL(selectedFile);
+      }
+      showToast('🎉', 'Pronto! Veja o antes e depois.');
+
     } catch (err) {
-      clearInterval(interval);
-      area.innerHTML = `<p style="color:var(--danger)">❌ Tempo esgotado ou erro de conexão. Tente novamente.</p>`;
-      showToast('❌', 'Erro de conexão. Tente novamente!');
+      area.innerHTML = `<p style="color:var(--danger)">❌ ${err.message || 'Erro. Tente novamente.'}</p>`;
+      showToast('❌', 'Erro: ' + (err.message || 'Tente novamente'));
     }
   }
+
 
   function downloadResult(url) {
     const a = document.createElement('a');
