@@ -52,15 +52,11 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 app.get('/api/auth/me', authMiddleware, (req, res) => {
-  const user = users.find(u => u.id === req.user.id);
   if (!user) return res.status(404).json({ error: 'Não encontrado' });
   res.json({ id: user.id, name: user.name, email: user.email, plan: user.plan, credits: user.credits });
 });
 
 app.post('/api/transform/enhance', upload.single('image'), async (req, res) => {
-  const user = users.find(u => u.id === req.user.id);
-  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
-  if (user.plan === 'free' && user.credits <= 0) return res.status(403).json({ error: 'Créditos esgotados!', upgrade: true });
 
   try {
     const imageBase64 = req.file.buffer.toString('base64');
@@ -88,14 +84,11 @@ app.post('/api/transform/enhance', upload.single('image'), async (req, res) => {
       if (result.status === 'succeeded') break;
       if (result.status === 'failed') throw new Error('IA falhou');
     }
-
-    if (user.plan === 'free') user.credits--;
-    res.json({ success: true, resultUrl: result.output, creditsLeft: user.credits });
+    res.json({ success: true, resultUrl: result.output });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/user/plan', authMiddleware, (req, res) => {
-  const user = users.find(u => u.id === req.user.id);
   if (!user) return res.status(404).json({ error: 'Não encontrado' });
   res.json({ plan: user.plan, credits: user.credits });
 });
