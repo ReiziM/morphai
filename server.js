@@ -1,178 +1,1087 @@
-const express = require('express');
-const cors = require('cors');
-const multer = require('multer');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MorphAI — Transformação com Inteligência Artificial</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #08080F;
+      --bg2: #0F0F1A;
+      --bg3: #16162A;
+      --card: #1A1A2E;
+      --border: rgba(255,255,255,0.08);
+      --border2: rgba(255,255,255,0.15);
+      --accent: #7C6DFA;
+      --accent2: #A78BFA;
+      --gold: #F5C842;
+      --text: #F0EFF8;
+      --muted: rgba(240,239,248,0.5);
+      --subtle: rgba(240,239,248,0.25);
+      --success: #4ADE80;
+      --danger: #F87171;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    h1,h2,h3,h4 { font-family: 'Syne', sans-serif; }
 
-require('dotenv').config();
+    /* NAV */
+    nav {
+      position: fixed; top: 0; width: 100%; z-index: 100;
+      background: rgba(8,8,15,0.85);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 64px;
+    }
+    .nav-logo { font-family: 'Syne', sans-serif; font-size: 1.4rem; font-weight: 800; }
+    .nav-logo span { color: var(--accent2); }
+    .nav-links { display: flex; gap: 2rem; list-style: none; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; transition: color .2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta { display: flex; gap: 0.75rem; }
+    .btn { border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 0.9rem; font-weight: 500; border-radius: 8px; padding: 0.5rem 1.25rem; transition: all .2s; }
+    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border2); }
+    .btn-ghost:hover { color: var(--text); border-color: var(--accent); }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(124,109,250,0.4); }
+    .btn-gold { background: var(--gold); color: #000; font-weight: 600; }
+    .btn-gold:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-lg { padding: 0.875rem 2rem; font-size: 1rem; border-radius: 10px; }
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'morphai2025secret';
-const REPLICATE_TOKEN = process.env.REPLICATE_API_TOKEN || '';
+    /* HERO */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center;
+      padding: 6rem 2rem 4rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+      width: 900px; height: 900px;
+      background: radial-gradient(circle, rgba(124,109,250,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: rgba(124,109,250,0.12);
+      border: 1px solid rgba(124,109,250,0.3);
+      border-radius: 999px;
+      padding: 0.35rem 1rem;
+      font-size: 0.8rem;
+      color: var(--accent2);
+      margin-bottom: 2rem;
+      animation: fadeInDown 0.6s ease;
+    }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent2); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .hero h1 {
+      font-size: clamp(2.8rem, 7vw, 5.5rem);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.5rem;
+      animation: fadeInDown 0.7s ease 0.1s both;
+    }
+    .hero h1 .gradient {
+      background: linear-gradient(135deg, var(--accent2) 0%, var(--gold) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      font-size: 1.15rem; color: var(--muted); max-width: 580px;
+      line-height: 1.7; margin-bottom: 2.5rem;
+      animation: fadeInDown 0.7s ease 0.2s both;
+    }
+    .hero-buttons { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; animation: fadeInDown 0.7s ease 0.3s both; }
+    .hero-stats {
+      display: flex; gap: 3rem; margin-top: 4rem;
+      animation: fadeInDown 0.7s ease 0.4s both;
+    }
+    .stat { text-align: center; }
+    .stat-num { font-family: 'Syne', sans-serif; font-size: 1.8rem; font-weight: 700; }
+    .stat-label { font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem; }
 
-const users = [];
-
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
-
-app.use(cors({ origin: '*' }));
-app.use(express.json());
-
-function authMiddleware(req, res, next) {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Token necessário' });
-  try { req.user = jwt.verify(token, JWT_SECRET); next(); }
-  catch { res.status(401).json({ error: 'Token inválido' }); }
-}
-
-app.get('/', (req, res) => res.json({ status: 'MorphAI API rodando!' }));
-app.get('/api/health', (req, res) => res.json({ status: 'ok', replicate: !!REPLICATE_TOKEN }));
-
-app.post('/api/auth/signup', async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ error: 'Preencha todos os campos' });
-    if (users.find(u => u.email === email)) return res.status(400).json({ error: 'Email já cadastrado' });
-    const hashed = await bcrypt.hash(password, 10);
-    const user = { id: Date.now().toString(), name: name || 'Usuário', email, password: hashed, plan: 'free', credits: 5 };
-    users.push(user);
-    const token = jwt.sign({ id: user.id, email }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, name: user.name, email, plan: user.plan, credits: user.credits } });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const user = users.find(u => u.email === email);
-    if (!user || !(await bcrypt.compare(password, user.password))) return res.status(401).json({ error: 'Email ou senha incorretos' });
-    const token = jwt.sign({ id: user.id, email }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, name: user.name, email, plan: user.plan, credits: user.credits } });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.get('/api/auth/me', authMiddleware, (req, res) => {
-  if (!user) return res.status(404).json({ error: 'Não encontrado' });
-  res.json({ id: user.id, name: user.name, email: user.email, plan: user.plan, credits: user.credits });
-});
-
-app.post('/api/transform/enhance', upload.single('image'), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'Nenhuma imagem enviada' });
-
-    // Converte imagem para base64
-    const imageBase64 = req.file.buffer 
-      ? req.file.buffer.toString('base64')
-      : fs.readFileSync(req.file.path, { encoding: 'base64' });
-    const mimeType = req.file.mimetype || 'image/jpeg';
-    const imageDataUrl = `data:${mimeType};base64,${imageBase64}`;
-
-    // GFPGAN v1.4 — restauração facial e melhoria de pele (modelo ativo no Replicate)
-    const createRes = await fetch('https://api.replicate.com/v1/predictions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        version: 'tencentarc/gfpgan:0fbacf7afc6817b4c2c349c93f1e4c03edb8fcf9d9fccf2c9e54d16e93e6b74e',
-        input: {
-          img: imageDataUrl,
-          version: 'v1.4',
-          scale: 2
-        }
-      })
-    });
-
-    const prediction = await createRes.json();
-    if (!prediction.id) {
-      console.error('Replicate error:', prediction);
-      return res.status(500).json({ error: 'Erro ao iniciar IA. Verifique o token do Replicate.' });
+    /* PREVIEW STRIP */
+    .preview-strip {
+      padding: 0 2rem 5rem;
+      display: flex; justify-content: center;
+    }
+    .preview-box {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2rem;
+      max-width: 900px; width: 100%;
+      position: relative;
+    }
+    .preview-bar {
+      display: flex; gap: 6px; margin-bottom: 1.25rem;
+    }
+    .preview-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .preview-grid {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;
+    }
+    .preview-card {
+      background: var(--bg3);
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .preview-img {
+      width: 100%; height: 160px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 3rem;
+      position: relative;
+    }
+    .preview-label {
+      padding: 0.6rem 0.75rem;
+      font-size: 0.75rem; color: var(--muted);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .preview-badge {
+      background: rgba(74,222,128,0.12);
+      color: var(--success);
+      border-radius: 4px;
+      padding: 2px 6px; font-size: 0.65rem;
     }
 
-    // Aguarda resultado (polling)
-    let result = null;
-    for (let i = 0; i < 40; i++) {
-      await new Promise(r => setTimeout(r, 2000));
-      const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
-        headers: { 'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}` }
-      });
-      result = await pollRes.json();
-      if (result.status === 'succeeded') break;
-      if (result.status === 'failed') {
-        return res.status(500).json({ error: 'Processamento falhou no Replicate' });
+    /* SECTION */
+    section { padding: 5rem 2rem; }
+    .section-tag {
+      display: inline-block;
+      font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.15em;
+      color: var(--accent2); margin-bottom: 1rem;
+      font-weight: 600;
+    }
+    .section-title { font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 800; margin-bottom: 1rem; }
+    .section-sub { color: var(--muted); font-size: 1.05rem; max-width: 520px; line-height: 1.7; }
+
+    /* FEATURES */
+    .features { background: var(--bg); }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+      margin-top: 3rem;
+    }
+    .feature-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.75rem;
+      transition: border-color .3s, transform .3s;
+      cursor: pointer;
+    }
+    .feature-card:hover { border-color: var(--accent); transform: translateY(-4px); }
+    .feature-icon {
+      width: 48px; height: 48px;
+      background: rgba(124,109,250,0.12);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem;
+      margin-bottom: 1.25rem;
+    }
+    .feature-card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .feature-card p { font-size: 0.875rem; color: var(--muted); line-height: 1.6; }
+
+    /* APP SECTION */
+    .app-section { background: var(--bg2); }
+    .app-container { max-width: 960px; margin: 3rem auto 0; }
+    .app-tabs {
+      display: flex; gap: 0.5rem;
+      background: var(--bg3);
+      border-radius: 12px;
+      padding: 0.35rem;
+      margin-bottom: 2rem;
+    }
+    .app-tab {
+      flex: 1; padding: 0.6rem 1rem;
+      background: none; border: none; cursor: pointer;
+      font-family: 'DM Sans', sans-serif; font-size: 0.85rem;
+      color: var(--muted); border-radius: 8px; transition: all .2s;
+    }
+    .app-tab.active { background: var(--accent); color: #fff; }
+
+    .upload-zone {
+      border: 2px dashed var(--border2);
+      border-radius: 16px;
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      margin-bottom: 1.5rem;
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(124,109,250,0.05);
+    }
+    .upload-icon { font-size: 2.5rem; margin-bottom: 1rem; }
+    .upload-zone h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+    .upload-zone p { color: var(--muted); font-size: 0.875rem; }
+    input[type="file"] { display: none; }
+
+    .options-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.75rem; margin-bottom: 1.5rem;
+    }
+    .option-btn {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem;
+      cursor: pointer;
+      text-align: center;
+      transition: all .2s;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+    }
+    .option-btn:hover, .option-btn.selected {
+      border-color: var(--accent);
+      background: rgba(124,109,250,0.1);
+      color: var(--accent2);
+    }
+    .option-btn .opt-icon { font-size: 1.5rem; margin-bottom: 0.4rem; }
+    .option-btn .opt-label { font-size: 0.8rem; font-weight: 500; }
+    .option-btn .opt-badge {
+      font-size: 0.6rem; background: var(--gold); color: #000;
+      border-radius: 4px; padding: 1px 5px; margin-top: 0.25rem;
+      display: inline-block;
+    }
+
+    .slider-group { margin-bottom: 1.25rem; }
+    .slider-header { display: flex; justify-content: space-between; margin-bottom: 0.4rem; font-size: 0.85rem; }
+    .slider-header span:first-child { color: var(--muted); }
+    .slider-header span:last-child { color: var(--accent2); font-weight: 600; }
+    input[type="range"] {
+      width: 100%; height: 4px;
+      -webkit-appearance: none; background: var(--bg3);
+      border-radius: 2px; outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%; background: var(--accent);
+      cursor: pointer; box-shadow: 0 0 0 4px rgba(124,109,250,0.2);
+    }
+
+    .process-btn {
+      width: 100%; padding: 1rem;
+      background: linear-gradient(135deg, var(--accent) 0%, #9B55F5 100%);
+      border: none; border-radius: 12px; cursor: pointer;
+      font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 700;
+      color: #fff; letter-spacing: 0.02em;
+      transition: all .2s;
+    }
+    .process-btn:hover { opacity: 0.9; transform: translateY(-2px); }
+    .process-btn:active { transform: translateY(0); }
+
+    .result-area {
+      display: none;
+      background: var(--bg3);
+      border-radius: 16px;
+      padding: 1.5rem;
+      text-align: center;
+      margin-top: 1.5rem;
+    }
+    .result-area.visible { display: block; animation: fadeIn 0.5s ease; }
+    .progress-bar-wrap {
+      background: var(--card);
+      border-radius: 999px; height: 6px; margin: 1rem 0;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--gold));
+      border-radius: 999px;
+      width: 0%;
+      transition: width 0.1s;
+    }
+
+    /* PRICING */
+    .pricing { background: var(--bg); }
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.5rem; margin-top: 3rem;
+    }
+    .pricing-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2rem;
+      position: relative;
+      transition: all .3s;
+    }
+    .pricing-card:hover { transform: translateY(-6px); }
+    .pricing-card.featured {
+      border-color: var(--accent);
+      background: linear-gradient(135deg, #1A1A2E 0%, #1D1535 100%);
+    }
+    .popular-badge {
+      position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+      background: linear-gradient(90deg, var(--accent), var(--gold));
+      color: #000; font-weight: 700; font-size: 0.75rem;
+      padding: 0.3rem 1rem; border-radius: 999px;
+      font-family: 'Syne', sans-serif;
+    }
+    .plan-name { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 0.75rem; }
+    .plan-price { font-family: 'Syne', sans-serif; font-size: 2.5rem; font-weight: 800; margin-bottom: 0.25rem; }
+    .plan-price sup { font-size: 1rem; vertical-align: top; margin-top: 0.5rem; display: inline-block; }
+    .plan-period { color: var(--muted); font-size: 0.85rem; margin-bottom: 1.5rem; }
+    .plan-features { list-style: none; margin-bottom: 1.75rem; }
+    .plan-features li {
+      display: flex; align-items: center; gap: 0.6rem;
+      font-size: 0.875rem; padding: 0.4rem 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .plan-features li:last-child { border-bottom: none; }
+    .plan-features .check { color: var(--success); font-weight: 700; }
+    .plan-features .pro-item { color: var(--text); }
+
+    /* MODAL */
+    .modal-overlay {
+      display: none;
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,0.8);
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2.5rem;
+      width: 100%; max-width: 420px;
+      position: relative;
+      animation: fadeInUp 0.3s ease;
+    }
+    .modal-close {
+      position: absolute; top: 1rem; right: 1rem;
+      background: none; border: none; color: var(--muted);
+      cursor: pointer; font-size: 1.25rem;
+    }
+    .modal h2 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .modal p { color: var(--muted); font-size: 0.875rem; margin-bottom: 1.75rem; }
+    .form-group { margin-bottom: 1rem; }
+    .form-label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.4rem; }
+    .form-input {
+      width: 100%; padding: 0.75rem 1rem;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 10px; color: var(--text);
+      font-family: 'DM Sans', sans-serif; font-size: 0.9rem;
+      outline: none; transition: border-color .2s;
+    }
+    .form-input:focus { border-color: var(--accent); }
+    .modal-footer { margin-top: 1rem; text-align: center; font-size: 0.8rem; color: var(--muted); }
+    .modal-footer a { color: var(--accent2); text-decoration: none; }
+
+    /* TOAST */
+    .toast {
+      position: fixed; bottom: 2rem; right: 2rem; z-index: 300;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1rem 1.5rem;
+      display: flex; align-items: center; gap: 0.75rem;
+      font-size: 0.875rem;
+      transform: translateY(100px); opacity: 0;
+      transition: all .3s;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast-icon { font-size: 1.1rem; }
+
+    /* FOOTER */
+    footer {
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      padding: 3rem 2rem;
+      text-align: center;
+    }
+    .footer-logo { font-family: 'Syne', sans-serif; font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem; }
+    .footer-links { display: flex; justify-content: center; gap: 2rem; margin-bottom: 1.5rem; }
+    .footer-links a { color: var(--muted); text-decoration: none; font-size: 0.85rem; }
+    .footer-copy { color: var(--subtle); font-size: 0.8rem; }
+
+    /* ANIMATIONS */
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes fadeInDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; vertical-align: middle; margin-right: 8px; }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .hero-stats { gap: 1.5rem; flex-wrap: wrap; justify-content: center; }
+      .preview-grid { grid-template-columns: 1fr 1fr; }
+      .preview-grid > :last-child { display: none; }
+    }
+
+    /* CENTER */
+    .container { max-width: 1100px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">Morph<span>AI</span></div>
+  <ul class="nav-links">
+    <li><a href="#features">Funcionalidades</a></li>
+    <li><a href="#app">Usar Agora</a></li>
+    <li><a href="#pricing">Planos</a></li>
+  </ul>
+  <div class="nav-cta">
+    <button class="btn btn-ghost" onclick="openModal('login')">Entrar</button>
+    <button class="btn btn-primary" onclick="openModal('signup')">Começar Grátis</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-badge">
+    <div class="badge-dot"></div>
+    Powered by IA Generativa Avançada
+  </div>
+  <h1>
+    Transforme qualquer<br/>
+    <span class="gradient">rosto, corpo e voz</span><br/>
+    com IA
+  </h1>
+  <p>O app mais avançado de transformação com inteligência artificial. Resultados hiper-realistas em segundos. Face swap, mudança de gênero, alteração corporal e clonagem de voz.</p>
+  <div class="hero-buttons">
+    <button class="btn btn-primary btn-lg" onclick="document.getElementById('app').scrollIntoView({behavior:'smooth'})">
+      🚀 Experimentar Agora — Grátis
+    </button>
+    <button class="btn btn-ghost btn-lg" onclick="document.getElementById('features').scrollIntoView({behavior:'smooth'})">
+      Ver Como Funciona
+    </button>
+  </div>
+  <div class="hero-stats">
+    <div class="stat"><div class="stat-num">2M+</div><div class="stat-label">Usuários ativos</div></div>
+    <div class="stat"><div class="stat-num">99.8%</div><div class="stat-label">Satisfação</div></div>
+    <div class="stat"><div class="stat-num">4.9★</div><div class="stat-label">Avaliação média</div></div>
+    <div class="stat"><div class="stat-num">&lt;8s</div><div class="stat-label">Tempo de processo</div></div>
+  </div>
+</section>
+
+<!-- PREVIEW -->
+<div class="preview-strip">
+  <div class="preview-box">
+    <div class="preview-bar">
+      <div class="preview-dot" style="background:#FF5F57"></div>
+      <div class="preview-dot" style="background:#FFBD2E"></div>
+      <div class="preview-dot" style="background:#28C840"></div>
+    </div>
+    <div class="preview-grid">
+      <div class="preview-card">
+        <div class="preview-img" style="background:linear-gradient(135deg,#1A1A3E,#2D2D5E)">🧑</div>
+        <div class="preview-label"><span>Original</span></div>
+      </div>
+      <div class="preview-card">
+        <div class="preview-img" style="background:linear-gradient(135deg,#1A2E3E,#1A3E4A)">⟳</div>
+        <div class="preview-label"><span>Processando…</span><span class="preview-badge">IA Ativa</span></div>
+      </div>
+      <div class="preview-card">
+        <div class="preview-img" style="background:linear-gradient(135deg,#1A2E1A,#1A3E2A)">👩</div>
+        <div class="preview-label"><span>Resultado</span><span class="preview-badge">Pronto</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section class="features" id="features">
+  <div class="container" style="text-align:center">
+    <span class="section-tag">Funcionalidades</span>
+    <h2 class="section-title">Tudo que você precisa para se transformar</h2>
+    <p class="section-sub" style="margin:0 auto">Tecnologia de IA de ponta para transformações realistas. Sem distorções, sem artificialidade.</p>
+  </div>
+  <div class="container">
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🔄</div>
+        <h3>Face Swap Avançado</h3>
+        <p>Troque rostos com precisão cirúrgica. Nossa IA mantém iluminação, sombras e textura de pele perfeitamente consistentes.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚤</div>
+        <h3>Transformação de Gênero</h3>
+        <p>Converta homem → mulher ou mulher → homem com resultado hiper-realista. Estrutura óssea, maquiagem e cabelo adaptados automaticamente.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🏋️</div>
+        <h3>Alteração Corporal</h3>
+        <p>Modifique proporções corporais, remova gordura, adicione massa muscular ou altere altura com física corporal realista.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🎙️</div>
+        <h3>Transformação de Voz</h3>
+        <p>Clone e transforme vozes em tempo real. Mude gênero, idade, sotaque e timbre com qualidade de estúdio profissional.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">✨</div>
+        <h3>Melhoria de Pele & Cabelo</h3>
+        <p>Retoque pele, remova imperfeições, altere cor e textura do cabelo. Resultados naturais sem efeito "photoshop barato".</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🎛️</div>
+        <h3>Personalização Total</h3>
+        <p>Controles deslizantes para ajustar intensidade de cada efeito. Você controla o resultado final com precisão absoluta.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- APP SECTION -->
+<section class="app-section" id="app">
+  <div class="container" style="text-align:center;margin-bottom:0">
+    <span class="section-tag">Experimente Agora</span>
+    <h2 class="section-title">Transforme sua foto agora</h2>
+    <p class="section-sub" style="margin:0 auto 0">Upload gratuito • Resultado em segundos • Sem cadastro para testar</p>
+  </div>
+  <div class="app-container">
+    <div class="app-tabs">
+      <button class="app-tab active" onclick="switchTab(this,'imagem')">🖼️ Imagem</button>
+      <button class="app-tab" onclick="switchTab(this,'video')">🎬 Vídeo</button>
+      <button class="app-tab" onclick="switchTab(this,'voz')">🎙️ Voz</button>
+    </div>
+
+    <!-- UPLOAD -->
+    <div class="upload-zone" id="uploadZone"
+      ondragover="this.classList.add('dragover');event.preventDefault()"
+      ondragleave="this.classList.remove('dragover')"
+      ondrop="handleDrop(event)"
+      onclick="openFileDialog()" style="cursor:pointer">
+      <div class="upload-icon">📸</div>
+      <h3>Arraste sua foto aqui</h3>
+      <p>ou clique para selecionar • JPG, PNG, WEBP • Até 10MB</p>
+    </div>
+    <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFile(this)"/>
+
+    <!-- OPTIONS -->
+    <div class="options-grid">
+      <button class="option-btn" onclick="toggleOption(this)">
+        <div class="opt-icon">🔄</div>
+        <div class="opt-label">Face Swap</div>
+      </button>
+      <button class="option-btn" onclick="toggleOption(this)">
+        <div class="opt-icon">👩</div>
+        <div class="opt-label">→ Feminino</div>
+      </button>
+      <button class="option-btn" onclick="toggleOption(this)">
+        <div class="opt-icon">👨</div>
+        <div class="opt-label">→ Masculino</div>
+      </button>
+      <button class="option-btn" onclick="toggleOption(this)" style="position:relative">
+        <div class="opt-icon">🏋️</div>
+        <div class="opt-label">Corpo</div>
+        <div class="opt-badge">PRO</div>
+      </button>
+      <button class="option-btn" onclick="toggleOption(this)" style="position:relative">
+        <div class="opt-icon">🎙️</div>
+        <div class="opt-label">Voz</div>
+        <div class="opt-badge">PRO</div>
+      </button>
+      <button class="option-btn" onclick="toggleOption(this)">
+        <div class="opt-icon">✨</div>
+        <div class="opt-label">Melhorar Pele</div>
+      </button>
+    </div>
+
+    <!-- SLIDERS -->
+    <div style="background:var(--bg3);border-radius:12px;padding:1.25rem;margin-bottom:1.5rem;">
+      <div class="slider-group">
+        <div class="slider-header"><span>Intensidade da Transformação</span><span id="v1">75%</span></div>
+        <input type="range" min="0" max="100" value="75" oninput="document.getElementById('v1').textContent=this.value+'%'"/>
+      </div>
+      <div class="slider-group">
+        <div class="slider-header"><span>Suavização de Pele</span><span id="v2">60%</span></div>
+        <input type="range" min="0" max="100" value="60" oninput="document.getElementById('v2').textContent=this.value+'%'"/>
+      </div>
+      <div class="slider-group">
+        <div class="slider-header"><span>Realismo (Qualidade)</span><span id="v3">90%</span></div>
+        <input type="range" min="0" max="100" value="90" oninput="document.getElementById('v3').textContent=this.value+'%'"/>
+      </div>
+    </div>
+
+    <button class="process-btn" onclick="processImage()">
+      ⚡ Transformar com IA — Grátis
+    </button>
+
+    <!-- RESULT -->
+    <div class="result-area" id="resultArea">
+      <p style="color:var(--muted);margin-bottom:0.5rem;font-size:0.875rem">Processando com IA…</p>
+      <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+      <p id="statusText" style="font-size:0.8rem;color:var(--subtle)">Detectando rostos…</p>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing" id="pricing">
+  <div class="container" style="text-align:center">
+    <span class="section-tag">Planos e Preços</span>
+    <h2 class="section-title">Escolha o plano ideal para você</h2>
+    <p class="section-sub" style="margin:0 auto">Cancele quando quiser. Sem compromisso. Cobrado automaticamente pelo Mercado Pago ou cartão.</p>
+  </div>
+  <div class="container">
+    <div class="pricing-grid">
+      <!-- SEMANAL -->
+      <div class="pricing-card">
+        <div class="plan-name">Semanal</div>
+        <div class="plan-price"><sup>R$</sup>9<small style="font-size:1rem">,90</small></div>
+        <div class="plan-period">por semana</div>
+        <ul class="plan-features">
+          <li><span class="check">✓</span><span>50 transformações/semana</span></li>
+          <li><span class="check">✓</span><span>Face Swap básico</span></li>
+          <li><span class="check">✓</span><span>Mudança de gênero</span></li>
+          <li><span class="check">✓</span><span>Resolução HD</span></li>
+          <li><span class="check">✓</span><span>Download dos resultados</span></li>
+        </ul>
+        <button class="btn btn-ghost btn-lg" style="width:100%" onclick="openModal('signup')">Assinar Agora</button>
+      </div>
+
+      <!-- MENSAL (FEATURED) -->
+      <div class="pricing-card featured">
+        <div class="popular-badge">⭐ MAIS POPULAR</div>
+        <div class="plan-name">Mensal</div>
+        <div class="plan-price"><sup>R$</sup>29<small style="font-size:1rem">,90</small></div>
+        <div class="plan-period">por mês • economia de 25%</div>
+        <ul class="plan-features">
+          <li><span class="check">✓</span><span class="pro-item">Transformações ilimitadas</span></li>
+          <li><span class="check">✓</span><span class="pro-item">Face Swap avançado</span></li>
+          <li><span class="check">✓</span><span class="pro-item">Mudança de gênero HD</span></li>
+          <li><span class="check">✓</span><span class="pro-item">Alteração corporal</span></li>
+          <li><span class="check">✓</span><span class="pro-item">Transformação de voz</span></li>
+          <li><span class="check">✓</span><span class="pro-item">Resolução 4K</span></li>
+          <li><span class="check">✓</span><span class="pro-item">Processamento prioritário</span></li>
+        </ul>
+        <button class="btn btn-gold btn-lg" style="width:100%" onclick="openModal('signup')">Assinar Pro — R$29,90/mês</button>
+      </div>
+
+      <!-- TRIMESTRAL -->
+      <div class="pricing-card">
+        <div class="plan-name">Trimestral</div>
+        <div class="plan-price"><sup>R$</sup>69<small style="font-size:1rem">,90</small></div>
+        <div class="plan-period">a cada 3 meses • economia de 42%</div>
+        <ul class="plan-features">
+          <li><span class="check">✓</span><span>Tudo do Plano Mensal</span></li>
+          <li><span class="check">✓</span><span>Processamento em nuvem GPU</span></li>
+          <li><span class="check">✓</span><span>API de desenvolvedor</span></li>
+          <li><span class="check">✓</span><span>Suporte prioritário 24/7</span></li>
+          <li><span class="check">✓</span><span>Marca d'água removida</span></li>
+        </ul>
+        <button class="btn btn-ghost btn-lg" style="width:100%" onclick="openModal('signup')">Assinar Trimestral</button>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:2rem;color:var(--muted);font-size:0.85rem">
+      🔒 Pagamento seguro via Mercado Pago, Pix, Cartão de Crédito/Débito<br/>
+      ↩️ Garantia de reembolso total em 7 dias se não ficar satisfeito
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">Morph<span style="color:var(--accent2)">AI</span></div>
+  <div class="footer-links">
+    <a href="#">Termos de Uso</a>
+    <a href="#">Privacidade</a>
+    <a href="#">Contato</a>
+    <a href="#">API</a>
+  </div>
+  <div class="footer-copy">© 2025 MorphAI. Todos os direitos reservados.</div>
+</footer>
+
+<!-- MODAL LOGIN/SIGNUP -->
+<div class="modal-overlay" id="authModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <h2 id="modalTitle">Criar Conta Grátis</h2>
+    <p id="modalSub">Comece a transformar suas fotos hoje. 5 transformações gratuitas.</p>
+    <div id="signupFields">
+      <div class="form-group">
+        <label class="form-label">Nome completo</label>
+        <input class="form-input" type="text" placeholder="Seu nome completo" id="inputName"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">E-mail</label>
+      <input class="form-input" type="email" placeholder="seu@email.com" id="inputEmail"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Senha (mínimo 8 caracteres)</label>
+      <input class="form-input" type="password" placeholder="Mínimo 8 caracteres" id="inputPassword"/>
+    </div>
+    <button class="btn btn-primary" style="width:100%;padding:0.875rem;font-size:1rem;border-radius:10px;margin-top:0.5rem" onclick="handleAuth()">
+      <span id="authBtnText">Criar Conta — Grátis</span>
+    </button>
+    <div class="modal-footer" id="modalFooter">
+      Já tem conta? <a href="#" onclick="openModal('login');return false">Entrar aqui</a>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <span class="toast-icon" id="toastIcon">✅</span>
+  <span id="toastMsg">Pronto!</span>
+</div>
+
+<script>
+  const BACKEND = 'https://morphai-production-bb68.up.railway.app';
+
+  // =====================
+  // SISTEMA DE USUÁRIO
+  // =====================
+  function getUser() {
+    const u = localStorage.getItem('morphai_user');
+    return u ? JSON.parse(u) : null;
+  }
+
+  function updateNavUser() {
+    const user = getUser();
+    const cta = document.querySelector('.nav-cta');
+    if (!cta) return;
+    if (user) {
+      cta.innerHTML = `
+        <span style="color:var(--muted);font-size:0.85rem">Olá, <b style="color:var(--text)">${user.name}</b></span>
+        <button class="btn btn-ghost" onclick="logout()">Sair</button>
+      `;
+    }
+  }
+
+  function logout() {
+    localStorage.removeItem('morphai_user');
+    location.reload();
+  }
+
+  // Ao carregar a página, verifica se usuário está logado
+  window.addEventListener('load', function() {
+    updateNavUser();
+    const user = getUser();
+    if (!user) {
+      // Abre modal de cadastro automaticamente
+      setTimeout(() => openModal('signup'), 800);
+    }
+  });
+
+  // =====================
+  // MODAL DE AUTH
+  // =====================
+  function openModal(type) {
+    document.getElementById('authModal').classList.add('open');
+    if (type === 'login') {
+      document.getElementById('modalTitle').textContent = 'Entrar na sua conta';
+      document.getElementById('modalSub').textContent = 'Bem-vindo de volta!';
+      document.getElementById('signupFields').style.display = 'none';
+      document.getElementById('authBtnText').textContent = 'Entrar';
+      document.getElementById('modalFooter').innerHTML = 'Não tem conta? <a href="#" onclick="openModal(\'signup\');return false">Criar agora — grátis</a>';
+    } else {
+      document.getElementById('modalTitle').textContent = 'Criar sua conta';
+      document.getElementById('modalSub').textContent = 'Preencha para começar. É gratuito!';
+      document.getElementById('signupFields').style.display = 'block';
+      document.getElementById('authBtnText').textContent = 'Criar Conta';
+      document.getElementById('modalFooter').innerHTML = 'Já tem conta? <a href="#" onclick="openModal(\'login\');return false">Entrar aqui</a>';
+    }
+  }
+
+  function closeModal() {
+    const user = getUser();
+    if (!user) {
+      showToast('⚠️', 'Crie uma conta para usar o MorphAI!');
+      return; // Não deixa fechar sem cadastro
+    }
+    document.getElementById('authModal').classList.remove('open');
+  }
+
+  document.getElementById('authModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  // Validação e cadastro/login
+  function handleAuth() {
+    const isLogin = document.getElementById('authBtnText').textContent.includes('Entrar');
+
+    const emailInput = document.getElementById('inputEmail');
+    const passwordInput = document.getElementById('inputPassword');
+    const nameInput = document.getElementById('inputName');
+
+    const email = emailInput ? emailInput.value.trim() : '';
+    const password = passwordInput ? passwordInput.value : '';
+    const name = nameInput ? nameInput.value.trim() : '';
+
+    // Validações
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      showToast('❌', 'Digite um e-mail válido! Ex: nome@gmail.com');
+      emailInput.style.borderColor = 'var(--danger)';
+      return;
+    }
+    emailInput.style.borderColor = '';
+
+    if (password.length < 8) {
+      showToast('❌', 'A senha precisa ter pelo menos 8 caracteres!');
+      passwordInput.style.borderColor = 'var(--danger)';
+      return;
+    }
+    passwordInput.style.borderColor = '';
+
+    if (!isLogin && name.length < 2) {
+      showToast('❌', 'Digite seu nome completo!');
+      nameInput.style.borderColor = 'var(--danger)';
+      return;
+    }
+    if (nameInput) nameInput.style.borderColor = '';
+
+    if (isLogin) {
+      // Login — verifica se existe no localStorage
+      const saved = localStorage.getItem('morphai_accounts');
+      const accounts = saved ? JSON.parse(saved) : [];
+      const account = accounts.find(a => a.email === email && a.password === password);
+      if (!account) {
+        showToast('❌', 'E-mail ou senha incorretos!');
+        return;
       }
+      localStorage.setItem('morphai_user', JSON.stringify(account));
+      document.getElementById('authModal').classList.remove('open');
+      updateNavUser();
+      showToast('✅', `Bem-vindo de volta, ${account.name}!`);
+    } else {
+      // Cadastro — salva no localStorage
+      const saved = localStorage.getItem('morphai_accounts');
+      const accounts = saved ? JSON.parse(saved) : [];
+      if (accounts.find(a => a.email === email)) {
+        showToast('❌', 'Este e-mail já está cadastrado. Faça login!');
+        openModal('login');
+        return;
+      }
+      const user = { name, email, password, plan: 'free', credits: 5, createdAt: new Date().toISOString() };
+      accounts.push(user);
+      localStorage.setItem('morphai_accounts', JSON.stringify(accounts));
+      localStorage.setItem('morphai_user', JSON.stringify(user));
+      document.getElementById('authModal').classList.remove('open');
+      updateNavUser();
+      showToast('✅', `Conta criada! Bem-vindo, ${name}! Você tem 5 transformações grátis.`);
     }
-
-    if (!result || !result.output) {
-      return res.status(500).json({ error: 'Timeout — tente novamente' });
-    }
-
-    res.json({ success: true, resultUrl: result.output });
-  } catch (err) {
-    console.error('Enhance error:', err);
-    res.status(500).json({ error: 'Erro interno: ' + err.message });
   }
-});
 
-app.post('/api/transform/gender', upload.single('image'), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'Nenhuma imagem enviada' });
+  // =====================
+  // TOAST
+  // =====================
+  function showToast(icon, msg) {
+    const t = document.getElementById('toast');
+    document.getElementById('toastIcon').textContent = icon;
+    document.getElementById('toastMsg').textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 4000);
+  }
 
-    const imageBase64 = req.file.buffer
-      ? req.file.buffer.toString('base64')
-      : fs.readFileSync(req.file.path, { encoding: 'base64' });
-    const mimeType = req.file.mimetype || 'image/jpeg';
-    const imageDataUrl = `data:${mimeType};base64,${imageBase64}`;
-    const { targetGender } = req.body;
+  // =====================
+  // TABS
+  // =====================
+  function switchTab(btn, tab) {
+    document.querySelectorAll('.app-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    const zone = document.getElementById('uploadZone');
+    if (tab === 'voz') {
+      zone.querySelector('h3').textContent = 'Arraste seu áudio aqui';
+      zone.querySelector('p').textContent = 'MP3, WAV, M4A • Até 50MB';
+      zone.querySelector('.upload-icon').textContent = '🎙️';
+    } else if (tab === 'video') {
+      zone.querySelector('h3').textContent = 'Arraste seu vídeo aqui';
+      zone.querySelector('p').textContent = 'MP4, MOV, AVI • Até 100MB';
+      zone.querySelector('.upload-icon').textContent = '🎬';
+    } else {
+      zone.querySelector('h3').textContent = 'Arraste sua foto aqui';
+      zone.querySelector('p').textContent = 'ou clique para selecionar • JPG, PNG, WEBP • Até 10MB';
+      zone.querySelector('.upload-icon').textContent = '📸';
+    }
+  }
 
-    const prompt = targetGender === 'female'
-      ? 'beautiful woman, feminine features, long hair, makeup, photorealistic, high quality portrait'
-      : 'handsome man, masculine features, short hair, strong jawline, photorealistic, high quality portrait';
+  // =====================
+  // OPTIONS
+  // =====================
+  function toggleOption(btn) {
+    const isPro = btn.querySelector('.opt-badge');
+    if (isPro) {
+      showToast('⭐', 'Funcionalidade PRO. Assine para usar!');
+      return;
+    }
+    document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+  }
 
-    // Stable Diffusion img2img via Replicate
-    const createRes = await fetch('https://api.replicate.com/v1/predictions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        version: 'stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc',
-        input: {
-          image: imageDataUrl,
-          prompt: prompt,
-          negative_prompt: 'deformed, ugly, blurry, cartoon, unrealistic, bad anatomy',
-          prompt_strength: 0.7,
-          num_inference_steps: 30,
-          guidance_scale: 7.5
-        }
-      })
-    });
+  // =====================
+  // UPLOAD DE ARQUIVO
+  // =====================
+  let selectedFile = null;
 
-    const prediction = await createRes.json();
-    if (!prediction.id) {
-      console.error('Replicate error:', prediction);
-      return res.status(500).json({ error: 'Erro ao iniciar IA.' });
+  function openFileDialog() {
+    const user = getUser();
+    if (!user) {
+      showToast('⚠️', 'Crie uma conta primeiro!');
+      openModal('signup');
+      return;
+    }
+    document.getElementById('fileInput').click();
+  }
+
+  function handleFile(input) {
+    if (input.files && input.files[0]) {
+      selectedFile = input.files[0];
+      const zone = document.getElementById('uploadZone');
+      zone.querySelector('h3').textContent = '✅ ' + selectedFile.name;
+      zone.querySelector('p').textContent = 'Clique para trocar a imagem';
+      zone.querySelector('.upload-icon').textContent = '🖼️';
+      showToast('📸', 'Imagem carregada com sucesso!');
+    }
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('uploadZone').classList.remove('dragover');
+    const user = getUser();
+    if (!user) { showToast('⚠️', 'Crie uma conta primeiro!'); openModal('signup'); return; }
+    if (e.dataTransfer.files[0]) {
+      selectedFile = e.dataTransfer.files[0];
+      document.getElementById('uploadZone').querySelector('h3').textContent = '✅ ' + selectedFile.name;
+      document.getElementById('uploadZone').querySelector('.upload-icon').textContent = '🖼️';
+      showToast('📸', 'Imagem carregada!');
+    }
+  }
+
+  // =====================
+  // PROCESSAR IMAGEM
+  // =====================
+  const steps = [
+    'Detectando rostos e pontos faciais…',
+    'Aplicando modelo de IA generativa…',
+    'Ajustando iluminação e texturas…',
+    'Refinando detalhes faciais…',
+    'Finalizando resultado em alta resolução…',
+    '✅ Transformação concluída!'
+  ];
+
+  async function processImage() {
+    const user = getUser();
+    if (!user) {
+      showToast('⚠️', 'Crie uma conta primeiro!');
+      openModal('signup');
+      return;
+    }
+    if (!selectedFile) {
+      showToast('⚠️', 'Selecione uma foto primeiro!');
+      return;
     }
 
-    let result = null;
-    for (let i = 0; i < 40; i++) {
-      await new Promise(r => setTimeout(r, 2000));
-      const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
-        headers: { 'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}` }
+    const area = document.getElementById('resultArea');
+
+    // Limpa resultado anterior e mostra progresso
+    area.innerHTML = `
+      <p style="color:var(--muted);margin-bottom:0.5rem;font-size:0.875rem" id="statusTitle">Processando com IA…</p>
+      <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar" style="width:0%"></div></div>
+      <p id="statusText" style="font-size:0.8rem;color:var(--subtle);margin-top:0.5rem">Iniciando…</p>
+    `;
+    area.classList.add('visible');
+    area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    // Animação de progresso enquanto espera
+    let prog = 0;
+    let step = 0;
+    const interval = setInterval(() => {
+      prog += Math.random() * 5 + 1;
+      if (prog > 92) prog = 92;
+      const bar = document.getElementById('progressBar');
+      const status = document.getElementById('statusText');
+      if (bar) bar.style.width = prog + '%';
+      if (status && step < steps.length - 1) { status.textContent = steps[step]; step++; }
+    }, 1200);
+
+    try {
+      const selected = document.querySelector('.option-btn.selected');
+      const optLabel = selected ? selected.querySelector('.opt-label').textContent : 'Melhorar Pele';
+      const formData = new FormData();
+      formData.append('image', selectedFile);
+      let endpoint = '/api/transform/enhance';
+      if (optLabel.includes('Feminino')) { formData.append('targetGender', 'female'); endpoint = '/api/transform/gender'; }
+      else if (optLabel.includes('Masculino')) { formData.append('targetGender', 'male'); endpoint = '/api/transform/gender'; }
+
+      // Timeout de 3 minutos (IA pode demorar)
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 180000);
+
+      const res = await fetch(BACKEND + endpoint, {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal
       });
-      result = await pollRes.json();
-      if (result.status === 'succeeded') break;
-      if (result.status === 'failed') return res.status(500).json({ error: 'Processamento falhou' });
+      clearTimeout(timeout);
+      clearInterval(interval);
+
+      const data = await res.json();
+
+      // Atualiza barra para 100%
+      const bar = document.getElementById('progressBar');
+      if (bar) bar.style.width = '100%';
+
+      if (data.resultUrl) {
+        // Monta resultado com imagem visível
+        area.innerHTML = `
+          <p style="color:var(--success);font-weight:600;font-size:1rem;margin-bottom:1rem">✅ Transformação concluída!</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+            <div>
+              <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;text-align:center">Original</p>
+              <img id="imgOriginal" style="width:100%;border-radius:12px;max-height:300px;object-fit:cover;border:1px solid var(--border)"/>
+            </div>
+            <div>
+              <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;text-align:center">Resultado IA</p>
+              <img src="${data.resultUrl}" style="width:100%;border-radius:12px;max-height:300px;object-fit:cover;border:1px solid var(--accent)" crossorigin="anonymous"/>
+            </div>
+          </div>
+          <button onclick="downloadResult('${data.resultUrl}')" class="process-btn" style="margin-top:0">
+            ⬇️ Baixar Resultado
+          </button>
+        `;
+        // Mostra imagem original ao lado
+        const imgOriginal = document.getElementById('imgOriginal');
+        if (imgOriginal && selectedFile) {
+          const reader = new FileReader();
+          reader.onload = e => { imgOriginal.src = e.target.result; };
+          reader.readAsDataURL(selectedFile);
+        }
+        showToast('🎉', 'Imagem pronta! Veja o antes e depois.');
+      } else {
+        area.innerHTML = `<p style="color:var(--danger)">❌ ${data.error || 'Erro no processamento. Tente novamente.'}</p>`;
+        showToast('❌', data.error || 'Erro. Tente novamente.');
+      }
+    } catch (err) {
+      clearInterval(interval);
+      area.innerHTML = `<p style="color:var(--danger)">❌ Tempo esgotado ou erro de conexão. Tente novamente.</p>`;
+      showToast('❌', 'Erro de conexão. Tente novamente!');
     }
-
-    if (!result || !result.output) return res.status(500).json({ error: 'Timeout' });
-    res.json({ success: true, resultUrl: Array.isArray(result.output) ? result.output[0] : result.output });
-  } catch (err) {
-    console.error('Gender error:', err);
-    res.status(500).json({ error: 'Erro: ' + err.message });
   }
-});
 
-
+  function downloadResult(url) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'morphai-resultado.jpg';
+    a.target = '_blank';
+    a.click();
+  }
+</script>
+</body>
+</html>
