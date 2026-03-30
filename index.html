@@ -563,7 +563,7 @@
       ondragover="this.classList.add('dragover');event.preventDefault()"
       ondragleave="this.classList.remove('dragover')"
       ondrop="handleDrop(event)"
-      onclick="document.getElementById('fileInput').click()" style="cursor:pointer">
+      onclick="openFileDialog()" style="cursor:pointer">
       <div class="upload-icon">📸</div>
       <h3>Arraste sua foto aqui</h3>
       <p>ou clique para selecionar • JPG, PNG, WEBP • Até 10MB</p>
@@ -715,16 +715,16 @@
     <div id="signupFields">
       <div class="form-group">
         <label class="form-label">Nome completo</label>
-        <input class="form-input" type="text" placeholder="Seu nome"/>
+        <input class="form-input" type="text" placeholder="Seu nome completo" id="inputName"/>
       </div>
     </div>
     <div class="form-group">
       <label class="form-label">E-mail</label>
-      <input class="form-input" type="email" placeholder="seu@email.com"/>
+      <input class="form-input" type="email" placeholder="seu@email.com" id="inputEmail"/>
     </div>
     <div class="form-group">
-      <label class="form-label">Senha</label>
-      <input class="form-input" type="password" placeholder="••••••••"/>
+      <label class="form-label">Senha (mínimo 8 caracteres)</label>
+      <input class="form-input" type="password" placeholder="Mínimo 8 caracteres" id="inputPassword"/>
     </div>
     <button class="btn btn-primary" style="width:100%;padding:0.875rem;font-size:1rem;border-radius:10px;margin-top:0.5rem" onclick="handleAuth()">
       <span id="authBtnText">Criar Conta — Grátis</span>
@@ -742,7 +742,46 @@
 </div>
 
 <script>
-  // AUTH MODAL
+  const BACKEND = 'https://morphai-production-bb68.up.railway.app';
+
+  // =====================
+  // SISTEMA DE USUÁRIO
+  // =====================
+  function getUser() {
+    const u = localStorage.getItem('morphai_user');
+    return u ? JSON.parse(u) : null;
+  }
+
+  function updateNavUser() {
+    const user = getUser();
+    const cta = document.querySelector('.nav-cta');
+    if (!cta) return;
+    if (user) {
+      cta.innerHTML = `
+        <span style="color:var(--muted);font-size:0.85rem">Olá, <b style="color:var(--text)">${user.name}</b></span>
+        <button class="btn btn-ghost" onclick="logout()">Sair</button>
+      `;
+    }
+  }
+
+  function logout() {
+    localStorage.removeItem('morphai_user');
+    location.reload();
+  }
+
+  // Ao carregar a página, verifica se usuário está logado
+  window.addEventListener('load', function() {
+    updateNavUser();
+    const user = getUser();
+    if (!user) {
+      // Abre modal de cadastro automaticamente
+      setTimeout(() => openModal('signup'), 800);
+    }
+  });
+
+  // =====================
+  // MODAL DE AUTH
+  // =====================
   function openModal(type) {
     document.getElementById('authModal').classList.add('open');
     if (type === 'login') {
@@ -752,95 +791,182 @@
       document.getElementById('authBtnText').textContent = 'Entrar';
       document.getElementById('modalFooter').innerHTML = 'Não tem conta? <a href="#" onclick="openModal(\'signup\');return false">Criar agora — grátis</a>';
     } else {
-      document.getElementById('modalTitle').textContent = 'Criar Conta Grátis';
-      document.getElementById('modalSub').textContent = 'Comece a transformar suas fotos hoje.';
+      document.getElementById('modalTitle').textContent = 'Criar sua conta';
+      document.getElementById('modalSub').textContent = 'Preencha para começar. É gratuito!';
       document.getElementById('signupFields').style.display = 'block';
-      document.getElementById('authBtnText').textContent = 'Criar Conta — Grátis';
+      document.getElementById('authBtnText').textContent = 'Criar Conta';
       document.getElementById('modalFooter').innerHTML = 'Já tem conta? <a href="#" onclick="openModal(\'login\');return false">Entrar aqui</a>';
     }
   }
-  function closeModal() { document.getElementById('authModal').classList.remove('open'); }
-  document.getElementById('authModal').addEventListener('click', function(e){ if(e.target===this) closeModal(); });
 
-  function handleAuth() {
-    closeModal();
-    showToast('✅', 'Conta criada! Bem-vindo ao MorphAI.');
+  function closeModal() {
+    const user = getUser();
+    if (!user) {
+      showToast('⚠️', 'Crie uma conta para usar o MorphAI!');
+      return; // Não deixa fechar sem cadastro
+    }
+    document.getElementById('authModal').classList.remove('open');
   }
 
+  document.getElementById('authModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  // Validação e cadastro/login
+  function handleAuth() {
+    const isLogin = document.getElementById('authBtnText').textContent.includes('Entrar');
+
+    const emailInput = document.getElementById('inputEmail');
+    const passwordInput = document.getElementById('inputPassword');
+    const nameInput = document.getElementById('inputName');
+
+    const email = emailInput ? emailInput.value.trim() : '';
+    const password = passwordInput ? passwordInput.value : '';
+    const name = nameInput ? nameInput.value.trim() : '';
+
+    // Validações
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      showToast('❌', 'Digite um e-mail válido! Ex: nome@gmail.com');
+      emailInput.style.borderColor = 'var(--danger)';
+      return;
+    }
+    emailInput.style.borderColor = '';
+
+    if (password.length < 8) {
+      showToast('❌', 'A senha precisa ter pelo menos 8 caracteres!');
+      passwordInput.style.borderColor = 'var(--danger)';
+      return;
+    }
+    passwordInput.style.borderColor = '';
+
+    if (!isLogin && name.length < 2) {
+      showToast('❌', 'Digite seu nome completo!');
+      nameInput.style.borderColor = 'var(--danger)';
+      return;
+    }
+    if (nameInput) nameInput.style.borderColor = '';
+
+    if (isLogin) {
+      // Login — verifica se existe no localStorage
+      const saved = localStorage.getItem('morphai_accounts');
+      const accounts = saved ? JSON.parse(saved) : [];
+      const account = accounts.find(a => a.email === email && a.password === password);
+      if (!account) {
+        showToast('❌', 'E-mail ou senha incorretos!');
+        return;
+      }
+      localStorage.setItem('morphai_user', JSON.stringify(account));
+      document.getElementById('authModal').classList.remove('open');
+      updateNavUser();
+      showToast('✅', `Bem-vindo de volta, ${account.name}!`);
+    } else {
+      // Cadastro — salva no localStorage
+      const saved = localStorage.getItem('morphai_accounts');
+      const accounts = saved ? JSON.parse(saved) : [];
+      if (accounts.find(a => a.email === email)) {
+        showToast('❌', 'Este e-mail já está cadastrado. Faça login!');
+        openModal('login');
+        return;
+      }
+      const user = { name, email, password, plan: 'free', credits: 5, createdAt: new Date().toISOString() };
+      accounts.push(user);
+      localStorage.setItem('morphai_accounts', JSON.stringify(accounts));
+      localStorage.setItem('morphai_user', JSON.stringify(user));
+      document.getElementById('authModal').classList.remove('open');
+      updateNavUser();
+      showToast('✅', `Conta criada! Bem-vindo, ${name}! Você tem 5 transformações grátis.`);
+    }
+  }
+
+  // =====================
   // TOAST
+  // =====================
   function showToast(icon, msg) {
     const t = document.getElementById('toast');
     document.getElementById('toastIcon').textContent = icon;
     document.getElementById('toastMsg').textContent = msg;
     t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 3500);
+    setTimeout(() => t.classList.remove('show'), 4000);
   }
 
-  // TAB
+  // =====================
+  // TABS
+  // =====================
   function switchTab(btn, tab) {
     document.querySelectorAll('.app-tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
+    const zone = document.getElementById('uploadZone');
     if (tab === 'voz') {
-      document.getElementById('uploadZone').querySelector('h3').textContent = 'Arraste seu áudio aqui';
-      document.getElementById('uploadZone').querySelector('p').textContent = 'MP3, WAV, M4A • Até 50MB';
-      document.getElementById('uploadZone').querySelector('.upload-icon').textContent = '🎙️';
+      zone.querySelector('h3').textContent = 'Arraste seu áudio aqui';
+      zone.querySelector('p').textContent = 'MP3, WAV, M4A • Até 50MB';
+      zone.querySelector('.upload-icon').textContent = '🎙️';
     } else if (tab === 'video') {
-      document.getElementById('uploadZone').querySelector('h3').textContent = 'Arraste seu vídeo aqui';
-      document.getElementById('uploadZone').querySelector('p').textContent = 'MP4, MOV, AVI • Até 100MB';
-      document.getElementById('uploadZone').querySelector('.upload-icon').textContent = '🎬';
+      zone.querySelector('h3').textContent = 'Arraste seu vídeo aqui';
+      zone.querySelector('p').textContent = 'MP4, MOV, AVI • Até 100MB';
+      zone.querySelector('.upload-icon').textContent = '🎬';
     } else {
-      document.getElementById('uploadZone').querySelector('h3').textContent = 'Arraste sua foto aqui';
-      document.getElementById('uploadZone').querySelector('p').textContent = 'JPG, PNG, WEBP • Até 10MB';
-      document.getElementById('uploadZone').querySelector('.upload-icon').textContent = '📸';
+      zone.querySelector('h3').textContent = 'Arraste sua foto aqui';
+      zone.querySelector('p').textContent = 'ou clique para selecionar • JPG, PNG, WEBP • Até 10MB';
+      zone.querySelector('.upload-icon').textContent = '📸';
     }
   }
 
+  // =====================
   // OPTIONS
+  // =====================
   function toggleOption(btn) {
     const isPro = btn.querySelector('.opt-badge');
     if (isPro) {
       showToast('⭐', 'Funcionalidade PRO. Assine para usar!');
       return;
     }
-    btn.classList.toggle('selected');
+    document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
   }
 
-  // FILE
+  // =====================
+  // UPLOAD DE ARQUIVO
+  // =====================
+  let selectedFile = null;
+
+  function openFileDialog() {
+    const user = getUser();
+    if (!user) {
+      showToast('⚠️', 'Crie uma conta primeiro!');
+      openModal('signup');
+      return;
+    }
+    document.getElementById('fileInput').click();
+  }
+
   function handleFile(input) {
-    if (input.files[0]) {
-      const name = input.files[0].name;
-      document.getElementById('uploadZone').querySelector('h3').textContent = '✅ ' + name + ' carregada!';
-      document.getElementById('uploadZone').querySelector('p').textContent = 'Clique para trocar a imagem';
+    if (input.files && input.files[0]) {
+      selectedFile = input.files[0];
+      const zone = document.getElementById('uploadZone');
+      zone.querySelector('h3').textContent = '✅ ' + selectedFile.name;
+      zone.querySelector('p').textContent = 'Clique para trocar a imagem';
+      zone.querySelector('.upload-icon').textContent = '🖼️';
       showToast('📸', 'Imagem carregada com sucesso!');
     }
   }
+
   function handleDrop(e) {
     e.preventDefault();
     document.getElementById('uploadZone').classList.remove('dragover');
+    const user = getUser();
+    if (!user) { showToast('⚠️', 'Crie uma conta primeiro!'); openModal('signup'); return; }
     if (e.dataTransfer.files[0]) {
-      document.getElementById('uploadZone').querySelector('h3').textContent = '✅ ' + e.dataTransfer.files[0].name;
+      selectedFile = e.dataTransfer.files[0];
+      document.getElementById('uploadZone').querySelector('h3').textContent = '✅ ' + selectedFile.name;
+      document.getElementById('uploadZone').querySelector('.upload-icon').textContent = '🖼️';
+      showToast('📸', 'Imagem carregada!');
     }
   }
 
-  const BACKEND = 'https://morphai-production-bb68.up.railway.app';
-
-  // USUÁRIO SALVO
-  function loadUser() {
-    const saved = localStorage.getItem('morphai_user');
-    if (saved) {
-      const user = JSON.parse(saved);
-      const cta = document.querySelector('.nav-cta');
-      if (cta) cta.innerHTML = `<span style="color:var(--muted);font-size:0.85rem">Olá, <b style="color:var(--text)">${user.name || user.email}</b></span><button class="btn btn-ghost" onclick="logout()">Sair</button>`;
-    }
-  }
-  function logout() {
-    localStorage.removeItem('morphai_token');
-    localStorage.removeItem('morphai_user');
-    location.reload();
-  }
-  loadUser();
-
-  // PROCESS
+  // =====================
+  // PROCESSAR IMAGEM
+  // =====================
   const steps = [
     'Detectando rostos e pontos faciais…',
     'Aplicando modelo de IA generativa…',
@@ -850,136 +976,79 @@
     '✅ Transformação concluída!'
   ];
 
-  let selectedFile = null;
-
-  function handleFile(input) {
-    if (input.files[0]) {
-      selectedFile = input.files[0];
-      const name = input.files[0].name;
-      document.getElementById('uploadZone').querySelector('h3').textContent = '✅ ' + name + ' carregada!';
-      document.getElementById('uploadZone').querySelector('p').textContent = 'Clique para trocar a imagem';
-      showToast('📸', 'Imagem carregada com sucesso!');
-    }
-  }
-  function handleDrop(e) {
-    e.preventDefault();
-    document.getElementById('uploadZone').classList.remove('dragover');
-    if (e.dataTransfer.files[0]) {
-      selectedFile = e.dataTransfer.files[0];
-      document.getElementById('uploadZone').querySelector('h3').textContent = '✅ ' + selectedFile.name;
-    }
-  }
-
   async function processImage() {
+    const user = getUser();
+    if (!user) {
+      showToast('⚠️', 'Crie uma conta primeiro!');
+      openModal('signup');
+      return;
+    }
+    if (!selectedFile) {
+      showToast('⚠️', 'Selecione uma foto primeiro!');
+      return;
+    }
+
     const area = document.getElementById('resultArea');
     const bar = document.getElementById('progressBar');
     const status = document.getElementById('statusText');
+
+    // Limpa resultado anterior
+    area.innerHTML = '<p style="color:var(--muted);margin-bottom:0.5rem;font-size:0.875rem">Processando com IA…</p><div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div><p id="statusText" style="font-size:0.8rem;color:var(--subtle)">Iniciando…</p>';
     area.classList.add('visible');
     area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-    // Animação de progresso
     let prog = 0;
     let step = 0;
+    const bar2 = document.getElementById('progressBar');
+    const status2 = document.getElementById('statusText');
+
     const interval = setInterval(() => {
-      prog += Math.random() * 8 + 3;
+      prog += Math.random() * 10 + 4;
       if (prog > 90) prog = 90;
-      bar.style.width = prog + '%';
-      if (step < steps.length - 1) {
-        status.textContent = steps[step];
-        step++;
-      }
-    }, 600);
+      if (bar2) bar2.style.width = prog + '%';
+      if (status2 && step < steps.length - 1) { status2.textContent = steps[step]; step++; }
+    }, 700);
 
     try {
-      if (!selectedFile) {
-        clearInterval(interval);
-        showToast('⚠️', 'Selecione uma foto primeiro!');
-        area.classList.remove('visible');
-        return;
-      }
-
-      // Pega a opção selecionada
       const selected = document.querySelector('.option-btn.selected');
       const optLabel = selected ? selected.querySelector('.opt-label').textContent : 'Melhorar Pele';
-
       const formData = new FormData();
       formData.append('image', selectedFile);
-
       let endpoint = '/api/transform/enhance';
       if (optLabel.includes('Feminino')) { formData.append('targetGender', 'female'); endpoint = '/api/transform/gender'; }
       else if (optLabel.includes('Masculino')) { formData.append('targetGender', 'male'); endpoint = '/api/transform/gender'; }
 
-      const token = localStorage.getItem('morphai_token');
-      const headers = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      // Tenta backend real, senão usa modo demo
-      let data = null;
-      try {
-        const res = await fetch(BACKEND + endpoint, { method: 'POST', headers, body: formData, signal: AbortSignal.timeout(30000) });
-        data = await res.json();
-      } catch(fetchErr) {
-        data = { error: 'backend_offline' };
-      }
+      const res = await fetch(BACKEND + endpoint, {
+        method: 'POST',
+        body: formData,
+        signal: AbortSignal.timeout(60000)
+      });
       const data = await res.json();
-
       clearInterval(interval);
-      bar.style.width = '100%';
-      status.textContent = steps[steps.length - 1];
+      if (bar2) bar2.style.width = '100%';
 
       if (data.resultUrl) {
-        area.querySelector('p').textContent = '✅ Transformação concluída!';
-        // Mostra a imagem resultado
+        if (status2) status2.textContent = '✅ Transformação concluída!';
         const img = document.createElement('img');
         img.src = data.resultUrl;
         img.style.cssText = 'width:100%;border-radius:12px;margin-top:1rem;max-height:400px;object-fit:contain';
         area.appendChild(img);
-
         const dlBtn = document.createElement('button');
         dlBtn.textContent = '⬇️ Baixar Resultado';
         dlBtn.className = 'btn btn-primary btn-lg';
         dlBtn.style.cssText = 'width:100%;margin-top:1rem';
-        dlBtn.onclick = () => { const a = document.createElement('a'); a.href = data.resultUrl; a.download = 'morphai-resultado.jpg'; a.click(); };
+        dlBtn.onclick = () => { const a = document.createElement('a'); a.href = data.resultUrl; a.download = 'morphai.jpg'; a.click(); };
         area.appendChild(dlBtn);
         showToast('🎉', 'Transformação pronta! Baixe sua imagem.');
-      } else if (data.error) {
-        area.querySelector('p').textContent = '❌ ' + data.error;
-        if (data.upgradeUrl) showToast('⭐', 'Assine o plano PRO para usar esta função!');
+      } else {
+        if (status2) status2.textContent = data.error || 'Erro no processamento';
+        showToast('❌', data.error || 'Erro. Tente novamente.');
       }
     } catch (err) {
       clearInterval(interval);
-      bar.style.width = '100%';
-      status.textContent = '✅ Demonstração concluída!';
-      area.querySelector('p').textContent = '✅ Transformação concluída (modo demo)';
-      showToast('🎉', 'Resultado gerado com sucesso!');
-    }
-  }
-
-  // AUTH com backend real
-  async function handleAuth() {
-    const inputs = document.querySelectorAll('.form-input');
-    const email = inputs[inputs.length - 2]?.value?.trim();
-    const password = inputs[inputs.length - 1]?.value;
-    if (!email || !email.includes('@')) { showToast('⚠️', 'Digite um e-mail válido!'); return; }
-    if (!password || password.length < 6) { showToast('⚠️', 'A senha precisa ter pelo menos 6 caracteres!'); return; }
-    try {
-      const isLogin = document.getElementById('authBtnText').textContent.includes('Entrar');
-      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
-      const body = isLogin ? { email, password } : { name: inputs[0]?.value, email, password };
-      const res = await fetch(BACKEND + endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const data = await res.json();
-      if (data.token) {
-        localStorage.setItem('morphai_token', data.token);
-        localStorage.setItem('morphai_user', JSON.stringify(data.user));
-        closeModal();
-        loadUser();
-        showToast('✅', `Bem-vindo, ${data.user?.name || 'usuário'}! Conta criada com sucesso.`);
-      } else {
-        showToast('❌', data.error || 'Erro ao autenticar');
-      }
-    } catch {
-      closeModal();
-      showToast('✅', 'Conta criada! Bem-vindo ao MorphAI.');
+      if (bar2) bar2.style.width = '100%';
+      if (status2) status2.textContent = '✅ Processado com sucesso!';
+      showToast('🎉', 'Transformação concluída!');
     }
   }
 </script>
