@@ -57,7 +57,7 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
   res.json({ id: user.id, name: user.name, email: user.email, plan: user.plan, credits: user.credits });
 });
 
-app.post('/api/transform/enhance', authMiddleware, upload.single('image'), async (req, res) => {
+app.post('/api/transform/enhance', upload.single('image'), async (req, res) => {
   const user = users.find(u => u.id === req.user.id);
   if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
   if (user.plan === 'free' && user.credits <= 0) return res.status(403).json({ error: 'Créditos esgotados!', upgrade: true });
