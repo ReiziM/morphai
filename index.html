@@ -824,8 +824,23 @@
     }
   }
 
-  // BACKEND URL
   const BACKEND = 'https://morphai-production-bb68.up.railway.app';
+
+  // USUÁRIO SALVO
+  function loadUser() {
+    const saved = localStorage.getItem('morphai_user');
+    if (saved) {
+      const user = JSON.parse(saved);
+      const cta = document.querySelector('.nav-cta');
+      if (cta) cta.innerHTML = `<span style="color:var(--muted);font-size:0.85rem">Olá, <b style="color:var(--text)">${user.name || user.email}</b></span><button class="btn btn-ghost" onclick="logout()">Sair</button>`;
+    }
+  }
+  function logout() {
+    localStorage.removeItem('morphai_token');
+    localStorage.removeItem('morphai_user');
+    location.reload();
+  }
+  loadUser();
 
   // PROCESS
   const steps = [
@@ -897,9 +912,17 @@
       else if (optLabel.includes('Masculino')) { formData.append('targetGender', 'male'); endpoint = '/api/transform/gender'; }
 
       const token = localStorage.getItem('morphai_token');
-      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(BACKEND + endpoint, { method: 'POST', headers, body: formData });
+      // Tenta backend real, senão usa modo demo
+      let data = null;
+      try {
+        const res = await fetch(BACKEND + endpoint, { method: 'POST', headers, body: formData, signal: AbortSignal.timeout(30000) });
+        data = await res.json();
+      } catch(fetchErr) {
+        data = { error: 'backend_offline' };
+      }
       const data = await res.json();
 
       clearInterval(interval);
@@ -937,9 +960,10 @@
   // AUTH com backend real
   async function handleAuth() {
     const inputs = document.querySelectorAll('.form-input');
-    const email = inputs[inputs.length - 2]?.value;
+    const email = inputs[inputs.length - 2]?.value?.trim();
     const password = inputs[inputs.length - 1]?.value;
-    if (!email || !password) { showToast('⚠️', 'Preencha e-mail e senha!'); return; }
+    if (!email || !email.includes('@')) { showToast('⚠️', 'Digite um e-mail válido!'); return; }
+    if (!password || password.length < 6) { showToast('⚠️', 'A senha precisa ter pelo menos 6 caracteres!'); return; }
     try {
       const isLogin = document.getElementById('authBtnText').textContent.includes('Entrar');
       const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
@@ -948,7 +972,9 @@
       const data = await res.json();
       if (data.token) {
         localStorage.setItem('morphai_token', data.token);
+        localStorage.setItem('morphai_user', JSON.stringify(data.user));
         closeModal();
+        loadUser();
         showToast('✅', `Bem-vindo, ${data.user?.name || 'usuário'}! Conta criada com sucesso.`);
       } else {
         showToast('❌', data.error || 'Erro ao autenticar');
