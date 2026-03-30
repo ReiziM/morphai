@@ -989,25 +989,27 @@
     }
 
     const area = document.getElementById('resultArea');
-    const bar = document.getElementById('progressBar');
-    const status = document.getElementById('statusText');
 
-    // Limpa resultado anterior
-    area.innerHTML = '<p style="color:var(--muted);margin-bottom:0.5rem;font-size:0.875rem">Processando com IA…</p><div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div><p id="statusText" style="font-size:0.8rem;color:var(--subtle)">Iniciando…</p>';
+    // Limpa resultado anterior e mostra progresso
+    area.innerHTML = `
+      <p style="color:var(--muted);margin-bottom:0.5rem;font-size:0.875rem" id="statusTitle">Processando com IA…</p>
+      <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar" style="width:0%"></div></div>
+      <p id="statusText" style="font-size:0.8rem;color:var(--subtle);margin-top:0.5rem">Iniciando…</p>
+    `;
     area.classList.add('visible');
     area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
+    // Animação de progresso enquanto espera
     let prog = 0;
     let step = 0;
-    const bar2 = document.getElementById('progressBar');
-    const status2 = document.getElementById('statusText');
-
     const interval = setInterval(() => {
-      prog += Math.random() * 10 + 4;
-      if (prog > 90) prog = 90;
-      if (bar2) bar2.style.width = prog + '%';
-      if (status2 && step < steps.length - 1) { status2.textContent = steps[step]; step++; }
-    }, 700);
+      prog += Math.random() * 5 + 1;
+      if (prog > 92) prog = 92;
+      const bar = document.getElementById('progressBar');
+      const status = document.getElementById('statusText');
+      if (bar) bar.style.width = prog + '%';
+      if (status && step < steps.length - 1) { status.textContent = steps[step]; step++; }
+    }, 1200);
 
     try {
       const selected = document.querySelector('.option-btn.selected');
@@ -1018,38 +1020,67 @@
       if (optLabel.includes('Feminino')) { formData.append('targetGender', 'female'); endpoint = '/api/transform/gender'; }
       else if (optLabel.includes('Masculino')) { formData.append('targetGender', 'male'); endpoint = '/api/transform/gender'; }
 
+      // Timeout de 3 minutos (IA pode demorar)
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 180000);
+
       const res = await fetch(BACKEND + endpoint, {
         method: 'POST',
         body: formData,
-        signal: AbortSignal.timeout(60000)
+        signal: controller.signal
       });
-      const data = await res.json();
+      clearTimeout(timeout);
       clearInterval(interval);
-      if (bar2) bar2.style.width = '100%';
+
+      const data = await res.json();
+
+      // Atualiza barra para 100%
+      const bar = document.getElementById('progressBar');
+      if (bar) bar.style.width = '100%';
 
       if (data.resultUrl) {
-        if (status2) status2.textContent = '✅ Transformação concluída!';
-        const img = document.createElement('img');
-        img.src = data.resultUrl;
-        img.style.cssText = 'width:100%;border-radius:12px;margin-top:1rem;max-height:400px;object-fit:contain';
-        area.appendChild(img);
-        const dlBtn = document.createElement('button');
-        dlBtn.textContent = '⬇️ Baixar Resultado';
-        dlBtn.className = 'btn btn-primary btn-lg';
-        dlBtn.style.cssText = 'width:100%;margin-top:1rem';
-        dlBtn.onclick = () => { const a = document.createElement('a'); a.href = data.resultUrl; a.download = 'morphai.jpg'; a.click(); };
-        area.appendChild(dlBtn);
-        showToast('🎉', 'Transformação pronta! Baixe sua imagem.');
+        // Monta resultado com imagem visível
+        area.innerHTML = `
+          <p style="color:var(--success);font-weight:600;font-size:1rem;margin-bottom:1rem">✅ Transformação concluída!</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+            <div>
+              <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;text-align:center">Original</p>
+              <img id="imgOriginal" style="width:100%;border-radius:12px;max-height:300px;object-fit:cover;border:1px solid var(--border)"/>
+            </div>
+            <div>
+              <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;text-align:center">Resultado IA</p>
+              <img src="${data.resultUrl}" style="width:100%;border-radius:12px;max-height:300px;object-fit:cover;border:1px solid var(--accent)" crossorigin="anonymous"/>
+            </div>
+          </div>
+          <button onclick="downloadResult('${data.resultUrl}')" class="process-btn" style="margin-top:0">
+            ⬇️ Baixar Resultado
+          </button>
+        `;
+        // Mostra imagem original ao lado
+        const imgOriginal = document.getElementById('imgOriginal');
+        if (imgOriginal && selectedFile) {
+          const reader = new FileReader();
+          reader.onload = e => { imgOriginal.src = e.target.result; };
+          reader.readAsDataURL(selectedFile);
+        }
+        showToast('🎉', 'Imagem pronta! Veja o antes e depois.');
       } else {
-        if (status2) status2.textContent = data.error || 'Erro no processamento';
+        area.innerHTML = `<p style="color:var(--danger)">❌ ${data.error || 'Erro no processamento. Tente novamente.'}</p>`;
         showToast('❌', data.error || 'Erro. Tente novamente.');
       }
     } catch (err) {
       clearInterval(interval);
-      if (bar2) bar2.style.width = '100%';
-      if (status2) status2.textContent = '✅ Processado com sucesso!';
-      showToast('🎉', 'Transformação concluída!');
+      area.innerHTML = `<p style="color:var(--danger)">❌ Tempo esgotado ou erro de conexão. Tente novamente.</p>`;
+      showToast('❌', 'Erro de conexão. Tente novamente!');
     }
+  }
+
+  function downloadResult(url) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'morphai-resultado.jpg';
+    a.target = '_blank';
+    a.click();
   }
 </script>
 </body>
