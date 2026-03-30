@@ -57,40 +57,122 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
 });
 
 app.post('/api/transform/enhance', upload.single('image'), async (req, res) => {
-
   try {
-    const imageBase64 = req.file.buffer.toString('base64');
-    const mimeType = req.file.mimetype;
+    if (!req.file) return res.status(400).json({ error: 'Nenhuma imagem enviada' });
 
-    const response = await fetch('https://api.replicate.com/v1/predictions', {
+    // Converte imagem para base64
+    const imageBase64 = req.file.buffer 
+      ? req.file.buffer.toString('base64')
+      : fs.readFileSync(req.file.path, { encoding: 'base64' });
+    const mimeType = req.file.mimetype || 'image/jpeg';
+    const imageDataUrl = `data:${mimeType};base64,${imageBase64}`;
+
+    // GFPGAN v1.4 — restauração facial e melhoria de pele (modelo ativo no Replicate)
+    const createRes = await fetch('https://api.replicate.com/v1/predictions', {
       method: 'POST',
-      headers: { 'Authorization': `Token ${REPLICATE_TOKEN}`, 'Content-Type': 'application/json' },
+      headers: {
+        'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({
-        version: '9283608cc6b7be6b65a8e44983db012355f829a539ad48d9f55be36dfa5de4d',
-        input: { img: `data:${mimeType};base64,${imageBase64}`, version: 'v1.4', scale: 2 }
+        version: 'tencentarc/gfpgan:0fbacf7afc6817b4c2c349c93f1e4c03edb8fcf9d9fccf2c9e54d16e93e6b74e',
+        input: {
+          img: imageDataUrl,
+          version: 'v1.4',
+          scale: 2
+        }
       })
     });
 
-    const prediction = await response.json();
-    if (!prediction.id) throw new Error('Erro ao criar predição');
-
-    let result;
-    for (let i = 0; i < 30; i++) {
-      await new Promise(r => setTimeout(r, 2000));
-      const poll = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
-        headers: { 'Authorization': `Token ${REPLICATE_TOKEN}` }
-      });
-      result = await poll.json();
-      if (result.status === 'succeeded') break;
-      if (result.status === 'failed') throw new Error('IA falhou');
+    const prediction = await createRes.json();
+    if (!prediction.id) {
+      console.error('Replicate error:', prediction);
+      return res.status(500).json({ error: 'Erro ao iniciar IA. Verifique o token do Replicate.' });
     }
+
+    // Aguarda resultado (polling)
+    let result = null;
+    for (let i = 0; i < 40; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
+        headers: { 'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}` }
+      });
+      result = await pollRes.json();
+      if (result.status === 'succeeded') break;
+      if (result.status === 'failed') {
+        return res.status(500).json({ error: 'Processamento falhou no Replicate' });
+      }
+    }
+
+    if (!result || !result.output) {
+      return res.status(500).json({ error: 'Timeout — tente novamente' });
+    }
+
     res.json({ success: true, resultUrl: result.output });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('Enhance error:', err);
+    res.status(500).json({ error: 'Erro interno: ' + err.message });
+  }
 });
 
-app.get('/api/user/plan', authMiddleware, (req, res) => {
-  if (!user) return res.status(404).json({ error: 'Não encontrado' });
-  res.json({ plan: user.plan, credits: user.credits });
+app.post('/api/transform/gender', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Nenhuma imagem enviada' });
+
+    const imageBase64 = req.file.buffer
+      ? req.file.buffer.toString('base64')
+      : fs.readFileSync(req.file.path, { encoding: 'base64' });
+    const mimeType = req.file.mimetype || 'image/jpeg';
+    const imageDataUrl = `data:${mimeType};base64,${imageBase64}`;
+    const { targetGender } = req.body;
+
+    const prompt = targetGender === 'female'
+      ? 'beautiful woman, feminine features, long hair, makeup, photorealistic, high quality portrait'
+      : 'handsome man, masculine features, short hair, strong jawline, photorealistic, high quality portrait';
+
+    // Stable Diffusion img2img via Replicate
+    const createRes = await fetch('https://api.replicate.com/v1/predictions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        version: 'stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc',
+        input: {
+          image: imageDataUrl,
+          prompt: prompt,
+          negative_prompt: 'deformed, ugly, blurry, cartoon, unrealistic, bad anatomy',
+          prompt_strength: 0.7,
+          num_inference_steps: 30,
+          guidance_scale: 7.5
+        }
+      })
+    });
+
+    const prediction = await createRes.json();
+    if (!prediction.id) {
+      console.error('Replicate error:', prediction);
+      return res.status(500).json({ error: 'Erro ao iniciar IA.' });
+    }
+
+    let result = null;
+    for (let i = 0; i < 40; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
+        headers: { 'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}` }
+      });
+      result = await pollRes.json();
+      if (result.status === 'succeeded') break;
+      if (result.status === 'failed') return res.status(500).json({ error: 'Processamento falhou' });
+    }
+
+    if (!result || !result.output) return res.status(500).json({ error: 'Timeout' });
+    res.json({ success: true, resultUrl: Array.isArray(result.output) ? result.output[0] : result.output });
+  } catch (err) {
+    console.error('Gender error:', err);
+    res.status(500).json({ error: 'Erro: ' + err.message });
+  }
 });
 
-app.listen(PORT, () => console.log(`✅ MorphAI rodando na porta ${PORT}`));
+
