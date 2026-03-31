@@ -981,11 +981,13 @@
     if (!user) { showToast('⚠️', 'Crie uma conta primeiro!'); openModal('signup'); return; }
     if (!selectedFile) { showToast('⚠️', 'Selecione uma foto primeiro!'); return; }
 
+    const REPLICATE_TOKEN = 'r8_7EJWnwln5ent6Osk4O6b7a0ZPJLr4xf0hJvk0';
+
     const area = document.getElementById('resultArea');
     area.innerHTML = `
       <p style="color:var(--muted);margin-bottom:0.5rem;font-size:0.875rem">Processando com IA…</p>
       <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar" style="width:5%"></div></div>
-      <p id="statusText" style="font-size:0.8rem;color:var(--subtle);margin-top:0.5rem">Enviando imagem…</p>
+      <p id="statusText" style="font-size:0.8rem;color:var(--subtle);margin-top:0.5rem">Preparando imagem…</p>
     `;
     area.classList.add('visible');
     area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -998,55 +1000,77 @@
     };
 
     try {
-      // Passo 1: envia imagem ao backend (rápido — só cria predição)
+      // Converte imagem para base64
+      setStatus('Convertendo imagem…', 10);
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(selectedFile);
+      });
+
       const selected = document.querySelector('.option-btn.selected');
       const optLabel = selected ? selected.querySelector('.opt-label').textContent : 'Melhorar Pele';
-      const formData = new FormData();
-      formData.append('image', selectedFile);
-      let endpoint = BACKEND + '/api/transform/enhance';
-      if (optLabel.includes('Feminino')) { formData.append('targetGender', 'female'); endpoint = BACKEND + '/api/transform/gender'; }
-      else if (optLabel.includes('Masculino')) { formData.append('targetGender', 'male'); endpoint = BACKEND + '/api/transform/gender'; }
 
-      setStatus('Enviando imagem para a IA…', 15);
-      const res = await fetch(endpoint, { method: 'POST', body: formData });
-      const data = await res.json();
+      setStatus('Enviando para IA…', 20);
 
-      if (data.error) { area.innerHTML = `<p style="color:var(--danger)">❌ ${data.error}</p>`; return; }
-      if (!data.predictionId) { area.innerHTML = `<p style="color:var(--danger)">❌ Erro ao iniciar IA</p>`; return; }
+      let predictionId = null;
 
-      // Passo 2: busca o token do Replicate para polling direto
-      setStatus('IA processando sua imagem…', 30);
-      const configRes = await fetch(BACKEND + '/api/config');
-      const config = await configRes.json();
-      const token = config.replicateToken;
+      if (optLabel.includes('Feminino') || optLabel.includes('Masculino')) {
+        // Mudança de gênero — SDXL
+        const prompt = optLabel.includes('Feminino')
+          ? 'beautiful woman, feminine features, long hair, makeup, photorealistic portrait, high quality, 4k'
+          : 'handsome man, masculine features, strong jaw, short hair, photorealistic portrait, high quality, 4k';
 
-      // Passo 3: polling direto no Replicate (sem timeout de servidor)
-      let result = null;
-      let attempts = 0;
-      const progressSteps = [30, 40, 50, 60, 70, 80, 85, 88, 90, 92];
-      const statusMsgs = [
-        'Detectando rosto…', 'Analisando estrutura facial…', 'Aplicando IA…',
-        'Melhorando textura…', 'Ajustando detalhes…', 'Finalizando…',
-        'Quase pronto…', 'Últimos ajustes…', 'Renderizando resultado…', 'Concluindo…'
-      ];
-
-      while (attempts < 60) {
-        await new Promise(r => setTimeout(r, 3000));
-        const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${data.predictionId}`, {
-          headers: { 'Authorization': `Token ${token}` }
+        const res = await fetch('https://api.replicate.com/v1/predictions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${REPLICATE_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            version: '7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc',
+            input: { prompt, negative_prompt: 'ugly, blurry, deformed, cartoon', num_inference_steps: 25, guidance_scale: 7.5, width: 1024, height: 1024 }
+          })
         });
-        result = await pollRes.json();
-        const idx = Math.min(attempts, progressSteps.length - 1);
-        setStatus(statusMsgs[idx] || 'Processando…', progressSteps[idx] || 90);
+        const data = await res.json();
+        if (!data.id) throw new Error(data.detail || 'Erro ao iniciar IA');
+        predictionId = data.id;
 
-        if (result.status === 'succeeded') break;
-        if (result.status === 'failed') throw new Error('IA falhou: ' + (result.error || 'erro'));
-        attempts++;
+      } else {
+        // Melhorar pele — CodeFormer
+        const res = await fetch('https://api.replicate.com/v1/predictions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${REPLICATE_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            version: '7de2ea26c616d5bf2245ad0d5e24f0ff9a6204578a5c876db53142edd9d2cd56',
+            input: { image: base64, codeformer_fidelity: 0.7, background_enhance: true, face_upsample: true, upscale: 2 }
+          })
+        });
+        const data = await res.json();
+        if (!data.id) throw new Error(data.detail || 'Erro ao iniciar IA');
+        predictionId = data.id;
       }
 
-      if (!result || result.status !== 'succeeded') throw new Error('Tempo esgotado');
+      setStatus('IA processando…', 35);
 
-      // Passo 4: mostra resultado
+      // Polling direto no Replicate
+      const msgs = ['Analisando rosto…','Aplicando IA…','Melhorando textura…','Ajustando detalhes…','Finalizando…','Quase pronto…'];
+      let attempt = 0;
+      let result = null;
+
+      while (attempt < 60) {
+        await new Promise(r => setTimeout(r, 3000));
+        const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
+          headers: { 'Authorization': `Bearer ${REPLICATE_TOKEN}` }
+        });
+        result = await pollRes.json();
+        const pct = Math.min(35 + attempt * 2, 92);
+        setStatus(msgs[Math.min(attempt, msgs.length-1)], pct);
+        if (result.status === 'succeeded') break;
+        if (result.status === 'failed') throw new Error('IA falhou: ' + (result.error || 'erro'));
+        attempt++;
+      }
+
+      if (!result || result.status !== 'succeeded') throw new Error('Tempo esgotado. Tente novamente.');
+
       setStatus('✅ Concluído!', 100);
       const resultUrl = Array.isArray(result.output) ? result.output[0] : result.output;
 
@@ -1055,27 +1079,23 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
           <div>
             <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;text-align:center">Original</p>
-            <img id="imgOriginal" style="width:100%;border-radius:12px;max-height:300px;object-fit:cover;border:1px solid var(--border)"/>
+            <img id="imgOriginal" style="width:100%;border-radius:12px;max-height:280px;object-fit:cover;border:1px solid var(--border)"/>
           </div>
           <div>
-            <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;text-align:center">Resultado IA</p>
-            <img src="${resultUrl}" style="width:100%;border-radius:12px;max-height:300px;object-fit:cover;border:2px solid var(--accent)" crossorigin="anonymous"/>
+            <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;text-align:center">Resultado IA ✨</p>
+            <img src="${resultUrl}" style="width:100%;border-radius:12px;max-height:280px;object-fit:cover;border:2px solid var(--accent)"/>
           </div>
         </div>
         <button onclick="downloadResult('${resultUrl}')" class="process-btn" style="margin-top:0">⬇️ Baixar Resultado</button>
       `;
 
       const imgOrig = document.getElementById('imgOriginal');
-      if (imgOrig && selectedFile) {
-        const reader = new FileReader();
-        reader.onload = e => { imgOrig.src = e.target.result; };
-        reader.readAsDataURL(selectedFile);
-      }
+      if (imgOrig) { imgOrig.src = base64; }
       showToast('🎉', 'Pronto! Veja o antes e depois.');
 
     } catch (err) {
       area.innerHTML = `<p style="color:var(--danger)">❌ ${err.message || 'Erro. Tente novamente.'}</p>`;
-      showToast('❌', 'Erro: ' + (err.message || 'Tente novamente'));
+      showToast('❌', err.message || 'Erro. Tente novamente.');
     }
   }
 
