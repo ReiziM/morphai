@@ -1,7 +1,23 @@
 {
   "version": 2,
-  "rewrites": [
-    { "source": "/api/transform", "destination": "/api/transform" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  "builds": [
+    {
+      "src": "api/transform.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "index.html",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/transform",
+      "dest": "/api/transform.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
   ]
 }
