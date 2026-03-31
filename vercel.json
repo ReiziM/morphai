@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  "rewrites": [
+    { "source": "/api/transform", "destination": "/api/transform" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
