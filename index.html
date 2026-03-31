@@ -981,8 +981,6 @@
     if (!user) { showToast('⚠️', 'Crie uma conta primeiro!'); openModal('signup'); return; }
     if (!selectedFile) { showToast('⚠️', 'Selecione uma foto primeiro!'); return; }
 
-    const REPLICATE_TOKEN = 'r8_7EJWnwln5ent6Osk4O6b7a0ZPJLr4xf0hJvk0';
-
     const area = document.getElementById('resultArea');
     area.innerHTML = `
       <p style="color:var(--muted);margin-bottom:0.5rem;font-size:0.875rem">Processando com IA…</p>
@@ -1000,79 +998,38 @@
     };
 
     try {
-      // Converte imagem para base64
       setStatus('Convertendo imagem…', 10);
       const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = e => resolve(e.target.result);
+        reader.onload = e => resolve(e.target.result.split(',')[1]);
         reader.onerror = reject;
         reader.readAsDataURL(selectedFile);
       });
 
       const selected = document.querySelector('.option-btn.selected');
       const optLabel = selected ? selected.querySelector('.opt-label').textContent : 'Melhorar Pele';
+      const type = (optLabel.includes('Feminino') || optLabel.includes('Masculino')) ? 'gender' : 'enhance';
+      const targetGender = optLabel.includes('Feminino') ? 'female' : 'male';
 
       setStatus('Enviando para IA…', 20);
 
-      let predictionId = null;
+      // Chama a função serverless do Vercel
+      const res = await fetch('/api/transform', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, mimeType: selectedFile.type, type, targetGender })
+      });
 
-      if (optLabel.includes('Feminino') || optLabel.includes('Masculino')) {
-        // Mudança de gênero — SDXL
-        const prompt = optLabel.includes('Feminino')
-          ? 'beautiful woman, feminine features, long hair, makeup, photorealistic portrait, high quality, 4k'
-          : 'handsome man, masculine features, strong jaw, short hair, photorealistic portrait, high quality, 4k';
+      const data = await res.json();
 
-        const res = await fetch('https://api.replicate.com/v1/predictions', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${REPLICATE_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            version: '7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc',
-            input: { prompt, negative_prompt: 'ugly, blurry, deformed, cartoon', num_inference_steps: 25, guidance_scale: 7.5, width: 1024, height: 1024 }
-          })
-        });
-        const data = await res.json();
-        if (!data.id) throw new Error(data.detail || 'Erro ao iniciar IA');
-        predictionId = data.id;
-
-      } else {
-        // Melhorar pele — CodeFormer
-        const res = await fetch('https://api.replicate.com/v1/predictions', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${REPLICATE_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            version: '7de2ea26c616d5bf2245ad0d5e24f0ff9a6204578a5c876db53142edd9d2cd56',
-            input: { image: base64, codeformer_fidelity: 0.7, background_enhance: true, face_upsample: true, upscale: 2 }
-          })
-        });
-        const data = await res.json();
-        if (!data.id) throw new Error(data.detail || 'Erro ao iniciar IA');
-        predictionId = data.id;
+      if (data.error) {
+        area.innerHTML = `<p style="color:var(--danger)">❌ ${data.error}</p>`;
+        showToast('❌', data.error);
+        return;
       }
-
-      setStatus('IA processando…', 35);
-
-      // Polling direto no Replicate
-      const msgs = ['Analisando rosto…','Aplicando IA…','Melhorando textura…','Ajustando detalhes…','Finalizando…','Quase pronto…'];
-      let attempt = 0;
-      let result = null;
-
-      while (attempt < 60) {
-        await new Promise(r => setTimeout(r, 3000));
-        const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
-          headers: { 'Authorization': `Bearer ${REPLICATE_TOKEN}` }
-        });
-        result = await pollRes.json();
-        const pct = Math.min(35 + attempt * 2, 92);
-        setStatus(msgs[Math.min(attempt, msgs.length-1)], pct);
-        if (result.status === 'succeeded') break;
-        if (result.status === 'failed') throw new Error('IA falhou: ' + (result.error || 'erro'));
-        attempt++;
-      }
-
-      if (!result || result.status !== 'succeeded') throw new Error('Tempo esgotado. Tente novamente.');
 
       setStatus('✅ Concluído!', 100);
-      const resultUrl = Array.isArray(result.output) ? result.output[0] : result.output;
+      const resultUrl = data.resultUrl;
 
       area.innerHTML = `
         <p style="color:var(--success);font-weight:600;font-size:1rem;margin-bottom:1rem">✅ Transformação concluída!</p>
@@ -1088,14 +1045,12 @@
         </div>
         <button onclick="downloadResult('${resultUrl}')" class="process-btn" style="margin-top:0">⬇️ Baixar Resultado</button>
       `;
-
-      const imgOrig = document.getElementById('imgOriginal');
-      if (imgOrig) { imgOrig.src = base64; }
+      document.getElementById('imgOriginal').src = URL.createObjectURL(selectedFile);
       showToast('🎉', 'Pronto! Veja o antes e depois.');
 
     } catch (err) {
       area.innerHTML = `<p style="color:var(--danger)">❌ ${err.message || 'Erro. Tente novamente.'}</p>`;
-      showToast('❌', err.message || 'Erro. Tente novamente.');
+      showToast('❌', err.message || 'Erro.');
     }
   }
 
